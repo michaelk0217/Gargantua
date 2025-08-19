@@ -74,10 +74,9 @@ void BlackHoleSim::cleanUp()
     for (size_t i = 0; i < renderCompleteSemaphores.size(); i++) vkDestroySemaphore(device->logicalDevice, renderCompleteSemaphores[i], nullptr);
     for (uint32_t i = 0; i < MAX_CONCURRENT_FRAMES; i++) vkDestroyFence(device->logicalDevice, waitFences[i], nullptr);
 
-    vkDestroyImage(device->logicalDevice, depthImage, nullptr);
-    vkDestroyImageView(device->logicalDevice, depthImageView, nullptr);
-    vkFreeMemory(device->logicalDevice, depthImageMemory, nullptr);
-    
+
+    depthImage.destroy();
+
     indexBuffer.destroy();
     vertexBuffer.destroy();
 
@@ -142,7 +141,7 @@ void BlackHoleSim::drawFrame()
 
     vks::tools::insertImageMemoryBarrier(
         commandBuffer,
-        depthImage,
+        depthImage.image,
         0,
         VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
         VK_IMAGE_LAYOUT_UNDEFINED,
@@ -160,7 +159,7 @@ void BlackHoleSim::drawFrame()
     colorAttachment.clearValue.color = { 0.0f, 0.0f, 0.2f, 0.0f };
 
     VkRenderingAttachmentInfo depthStencilAttachment{ VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO };
-    depthStencilAttachment.imageView = depthImageView;
+    depthStencilAttachment.imageView = depthImage.imageView;
     depthStencilAttachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
     depthStencilAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     depthStencilAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
@@ -259,9 +258,10 @@ void BlackHoleSim::windowResize()
     this->height = newHeight;
 
     // depthResource cleanup
-    vkDestroyImage(device->logicalDevice, depthImage, nullptr);
+    /*vkDestroyImage(device->logicalDevice, depthImage, nullptr);
     vkDestroyImageView(device->logicalDevice, depthImageView, nullptr);
-    vkFreeMemory(device->logicalDevice, depthImageMemory, nullptr);
+    vkFreeMemory(device->logicalDevice, depthImageMemory, nullptr);*/
+    depthImage.destroy();
 
     swapchain.reset();
 
@@ -298,6 +298,10 @@ void BlackHoleSim::createSyncPrimitives()
         semaphoreCI.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
         VK_CHECK_RESULT(vkCreateSemaphore(device->logicalDevice, &semaphoreCI, nullptr, &semaphore));
     }
+}
+
+void BlackHoleSim::createComputeStorageImage()
+{
 }
 
 void BlackHoleSim::createGraphicsPipeline()
@@ -540,50 +544,33 @@ void BlackHoleSim::createDepthResources()
     VkFormat depthFormat{};
     vks::tools::getSupportedDepthFormat(device->physicalDevice, &depthFormat);
 
-    VkImageCreateInfo imageInfo{};
-    imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    imageInfo.imageType = VK_IMAGE_TYPE_2D;
-    imageInfo.extent.width = swapchain->extent.width;
-    imageInfo.extent.height = swapchain->extent.height;
-    imageInfo.extent.depth = 1;
-    imageInfo.mipLevels = 1;
-    imageInfo.arrayLayers = 1;
-    imageInfo.format = depthFormat;
-    imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-    imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    imageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-    imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    imageInfo.flags = 0;
+    //depthImage.imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    depthImage.imageInfo.imageType = VK_IMAGE_TYPE_2D;
+    depthImage.imageInfo.extent.width = swapchain->extent.width;
+    depthImage.imageInfo.extent.height = swapchain->extent.height;
+    depthImage.imageInfo.extent.depth = 1;
+    depthImage.imageInfo.mipLevels = 1;
+    depthImage.imageInfo.arrayLayers = 1;
+    depthImage.imageInfo.format = depthFormat;
+    depthImage.imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    depthImage.imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    depthImage.imageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    depthImage.imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    depthImage.imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    depthImage.imageInfo.flags = 0;
 
-    VK_CHECK_RESULT(vkCreateImage(device->logicalDevice, &imageInfo, nullptr, &depthImage));
+    depthImage.viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    //depthImage.viewInfo.image = depthImage;
+    depthImage.viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    depthImage.viewInfo.format = depthFormat;
 
-    VkMemoryRequirements memRequirements;
-    vkGetImageMemoryRequirements(device->logicalDevice, depthImage, &memRequirements);
+    depthImage.viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+    depthImage.viewInfo.subresourceRange.baseMipLevel = 0;
+    depthImage.viewInfo.subresourceRange.levelCount = 1;
+    depthImage.viewInfo.subresourceRange.baseArrayLayer = 0;
+    depthImage.viewInfo.subresourceRange.layerCount = 1;
 
-    VkMemoryAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocInfo.allocationSize = memRequirements.size;
-    allocInfo.memoryTypeIndex = vks::tools::findMemoryType(device->physicalDevice, memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    
-    VK_CHECK_RESULT(vkAllocateMemory(device->logicalDevice, &allocInfo, nullptr, &depthImageMemory));
-
-    vkBindImageMemory(device->logicalDevice, depthImage, depthImageMemory, 0);
-
-
-    VkImageViewCreateInfo viewInfo{};
-    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    viewInfo.image = depthImage;
-    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    viewInfo.format = depthFormat;
-    
-    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-    viewInfo.subresourceRange.baseMipLevel = 0;
-    viewInfo.subresourceRange.levelCount = 1;
-    viewInfo.subresourceRange.baseArrayLayer = 0;
-    viewInfo.subresourceRange.layerCount = 1;
-    
-    VK_CHECK_RESULT(vkCreateImageView(device->logicalDevice, &viewInfo, nullptr, &depthImageView));
+    depthImage.createImage(device->logicalDevice, device->physicalDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 }
 
 void BlackHoleSim::createVertexBuffer()

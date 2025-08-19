@@ -8,6 +8,7 @@
 #include "VulkanSwapchain.h"
 #include "VulkanStructures.h"
 #include "VulkanBuffer.h"
+#include "VulkanImage.h"
 
 #include "Window.h"
 #include "Camera.hpp"
@@ -52,6 +53,11 @@ private:
 	std::vector<VkSemaphore> renderCompleteSemaphores{};
 	std::array<VkFence, MAX_CONCURRENT_FRAMES> waitFences{};
 
+	// ------ Compute Pipeline -------
+	void createComputeStorageImage();
+	VkImage outputImage;
+	VkImageView outputImageView;
+	VkDeviceMemory outputImageMemory;
 
 	// ------ Graphics Render Pipeline ------
 	void createGraphicsPipeline();
@@ -70,9 +76,7 @@ private:
 	VkDescriptorPool descriptorPool;
 
 	void createDepthResources();
-	VkImage depthImage;
-	VkImageView depthImageView;
-	VkDeviceMemory depthImageMemory;
+	vks::Image depthImage;
 
 	void createVertexBuffer();
 	vks::Buffer vertexBuffer;

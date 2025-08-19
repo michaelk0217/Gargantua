@@ -143,6 +143,7 @@
     <ClCompile Include="Gargantua.cpp" />
     <ClCompile Include="VulkanBuffer.cpp" />
     <ClCompile Include="VulkanDevice.cpp" />
+    <ClCompile Include="VulkanImage.cpp" />
     <ClCompile Include="VulkanSwapchain.cpp" />
     <ClCompile Include="VulkanTools.cpp" />
     <ClCompile Include="Window.cpp" />
@@ -152,6 +153,7 @@
     <ClInclude Include="Camera.hpp" />
     <ClInclude Include="VulkanBuffer.h" />
     <ClInclude Include="VulkanDevice.h" />
+    <ClInclude Include="VulkanImage.h" />
     <ClInclude Include="VulkanInitializers.hpp" />
     <ClInclude Include="VulkanStructures.h" />
     <ClInclude Include="VulkanSwapchain.h" />

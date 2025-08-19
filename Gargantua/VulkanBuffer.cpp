@@ -9,6 +9,7 @@
 */
 
 #include "VulkanBuffer.h"
+#include "VulkanImage.h"
 
 namespace vks
 {
