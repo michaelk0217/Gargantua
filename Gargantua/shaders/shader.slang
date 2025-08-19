@@ -30,12 +30,10 @@ VertexOutput vertexMain(VertexInput input)
 {
     VertexOutput output;
     
-    // Calculate the final position in clip space
     float4 worldPos = mul(ubo.model, float4(input.position, 1.0));
     float4 viewPos = mul(ubo.view, worldPos);
     output.position = mul(ubo.proj, viewPos);
 
-    // Pass the input color to the fragment shader
     output.color = input.color;
     
     return output;

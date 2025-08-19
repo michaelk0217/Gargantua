@@ -79,5 +79,8 @@
     <None Include="shaders\shader.slang">
       <Filter>Shaders</Filter>
     </None>
+    <None Include="shaders\raymarcher.slang">
+      <Filter>Shaders</Filter>
+    </None>
   </ItemGroup>
 </Project>

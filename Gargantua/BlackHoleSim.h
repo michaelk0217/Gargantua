@@ -36,6 +36,7 @@ private:
 	std::unique_ptr<VulkanSwapchain> swapchain;
 
 	std::vector<VkCommandBuffer> frameCommandBuffers;
+	//std::vector<VkCommandBuffer> computeCommandBuffers;
 
 	// ------ main functions ------
 	void initGlfwWindow();
@@ -54,18 +55,24 @@ private:
 	std::array<VkFence, MAX_CONCURRENT_FRAMES> waitFences{};
 
 	// ------ Compute Pipeline -------
+	void createComputePipeline();
+	void updateComputeDescriptorSets();
+	VkPipeline computePipeline;
+	VkPipelineLayout computePipelineLayout;
+	VkDescriptorSetLayout computeDescriptorSetLayout;
+	std::vector<VkDescriptorSet> computeDescriptorSets;
+	void cleanupComputePipeline();
+
 	void createComputeStorageImage();
-	VkImage outputImage;
-	VkImageView outputImageView;
-	VkDeviceMemory outputImageMemory;
+	vks::Image computeStorageImage;
 
 	// ------ Graphics Render Pipeline ------
-	void createGraphicsPipeline();
+	/*void createGraphicsPipeline();
 	VkDescriptorSetLayout graphicsDescriptorSetLayout;
 	VkPipelineLayout graphicsPipelineLayout;
 	VkPipeline graphicsPipeline;
 	void updateGraphicsDescriptorSet(uint32_t currentFrameIndex, VkBuffer uboBuffer);
-	std::vector<VkDescriptorSet> graphicsDescriptorSets;
+	std::vector<VkDescriptorSet> graphicsDescriptorSets;*/
 	void initializeFrameUbo();
 	std::vector<vks::Buffer> frameUBO;
 
@@ -75,22 +82,22 @@ private:
 	void createDescriptorPool();
 	VkDescriptorPool descriptorPool;
 
-	void createDepthResources();
-	vks::Image depthImage;
+	//void createDepthResources();
+	//vks::Image depthImage;
 
-	void createVertexBuffer();
-	vks::Buffer vertexBuffer;
-	void createIndexBuffer();
-	vks::Buffer indexBuffer;
+	//void createVertexBuffer();
+	//vks::Buffer vertexBuffer;
+	//void createIndexBuffer();
+	//vks::Buffer indexBuffer;
 
 
 
 	// triangle test
-	const std::vector<Vertex> vertices{
+	/*const std::vector<Vertex> vertices{
 			{ {  1.0f,  1.0f, 0.0f }, { 1.0f, 0.0f, 0.0f } },
 			{ { -1.0f,  1.0f, 0.0f }, { 0.0f, 1.0f, 0.0f } },
 			{ {  0.0f, -1.0f, 0.0f }, { 0.0f, 0.0f, 1.0f } }
 	};
-	std::vector<uint32_t> indices{ 0, 1, 2 };
+	std::vector<uint32_t> indices{ 0, 1, 2 };*/
 };
 
