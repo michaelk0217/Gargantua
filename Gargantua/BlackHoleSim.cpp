@@ -1,5 +1,8 @@
 #include "BlackHoleSim.h"
 
+#define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include <stb_image.h>
 
 void BlackHoleSim::run()
 {
@@ -44,6 +47,9 @@ void BlackHoleSim::initVulkan()
 
     initializeFrameUbo();
     //createGraphicsPipeline();
+
+    loadEnvironmentTextures();
+    createEnvironmentSampler();
     createComputeStorageImage();
     createComputePipeline();
 
@@ -130,6 +136,8 @@ void BlackHoleSim::cleanUp()
     //indexBuffer.destroy();
     //vertexBuffer.destroy();
 
+    spheremapTexture.destroy();
+    vkDestroySampler(device->logicalDevice, environmentSampler, nullptr);
     computeStorageImage.destroy();
     cleanupComputePipeline();
 
@@ -278,92 +286,7 @@ void BlackHoleSim::drawFrame()
         VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
     );
 
-    /*vks::tools::insertImageMemoryBarrier(
-        commandBuffer,
-        swapchain->images[imageIndex],
-        0,
-        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-        VK_IMAGE_LAYOUT_UNDEFINED,
-        VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-        VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
-    );
-
-    vks::tools::insertImageMemoryBarrier(
-        commandBuffer,
-        depthImage.image,
-        0,
-        VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-        VK_IMAGE_LAYOUT_UNDEFINED,
-        VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
-        VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
-        VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
-        VkImageSubresourceRange{ VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT, 0, 1, 0, 1 }
-    );
-
-    VkRenderingAttachmentInfo colorAttachment{ VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO };
-    colorAttachment.imageView = swapchain->imageViews[imageIndex];
-    colorAttachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    colorAttachment.clearValue.color = { 0.0f, 0.0f, 0.2f, 0.0f };
-
-    VkRenderingAttachmentInfo depthStencilAttachment{ VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO };
-    depthStencilAttachment.imageView = depthImage.imageView;
-    depthStencilAttachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-    depthStencilAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    depthStencilAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    depthStencilAttachment.clearValue.depthStencil = { 1.0f, 0 };
-
-    VkRenderingInfo renderingInfo{ VK_STRUCTURE_TYPE_RENDERING_INFO_KHR };
-    renderingInfo.renderArea = { 0, 0, width, height };
-    renderingInfo.layerCount = 1;
-    renderingInfo.colorAttachmentCount = 1;
-    renderingInfo.pColorAttachments = &colorAttachment;
-    renderingInfo.pDepthAttachment = &depthStencilAttachment;
-    renderingInfo.pStencilAttachment = &depthStencilAttachment;
-
-    vkCmdBeginRendering(commandBuffer, &renderingInfo);
-
-    VkViewport viewport{ 0.0f, 0.0f, (float)width, (float)height, 0.0f, 1.0f };
-    vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
-
-    VkRect2D scissor{ 0, 0, width, height };
-    vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
-
-    vkCmdBindDescriptorSets(
-        commandBuffer,
-        VK_PIPELINE_BIND_POINT_GRAPHICS,
-        graphicsPipelineLayout,
-        0, 1,
-        &graphicsDescriptorSets[currentFrame],
-        0, nullptr
-    );
-
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
-
-    VkDeviceSize offsets[1]{ 0 };
-
-    vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer.buffer, offsets);
-
-    vkCmdBindIndexBuffer(commandBuffer, indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-
-    vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
-
-    vkCmdEndRendering(commandBuffer);
-
-    vks::tools::insertImageMemoryBarrier(
-        commandBuffer,
-        swapchain->images[imageIndex],
-        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-        0,
-        VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
-        VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-        VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
-    );*/
+    
 
     VK_CHECK_RESULT(vkEndCommandBuffer(commandBuffer));
 
@@ -490,7 +413,7 @@ void BlackHoleSim::createSyncPrimitives()
 
 void BlackHoleSim::createComputePipeline()
 {
-    std::array<VkDescriptorSetLayoutBinding, 2> layoutBindings{};
+    std::array<VkDescriptorSetLayoutBinding, 4> layoutBindings{};
     layoutBindings[0].binding = 0;
     layoutBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
     layoutBindings[0].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
@@ -500,6 +423,16 @@ void BlackHoleSim::createComputePipeline()
     layoutBindings[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     layoutBindings[1].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
     layoutBindings[1].descriptorCount = 1;
+
+    layoutBindings[2].binding = 2;
+    layoutBindings[2].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    layoutBindings[2].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    layoutBindings[2].descriptorCount = 1;
+    
+    layoutBindings[3].binding = 3;
+    layoutBindings[3].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+    layoutBindings[3].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    layoutBindings[3].descriptorCount = 1;
 
     VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCI{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
     descriptorSetLayoutCI.bindingCount = static_cast<uint32_t>(layoutBindings.size());
@@ -543,7 +476,14 @@ void BlackHoleSim::updateComputeDescriptorSets()
         uboDescriptor.offset = 0;
         uboDescriptor.range = sizeof(ShaderData);
 
-        std::array<VkWriteDescriptorSet, 2> computeWriteDescriptorSets{};
+        VkDescriptorImageInfo spheremapDescriptor{};
+        spheremapDescriptor.imageView = spheremapTexture.imageView;
+        spheremapDescriptor.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        
+        VkDescriptorImageInfo samplerDescriptor{};
+        samplerDescriptor.sampler = environmentSampler;
+
+        std::array<VkWriteDescriptorSet, 4> computeWriteDescriptorSets{};
         computeWriteDescriptorSets[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         computeWriteDescriptorSets[0].dstBinding = 0;
         computeWriteDescriptorSets[0].dstSet = computeDescriptorSets[i];
@@ -557,6 +497,20 @@ void BlackHoleSim::updateComputeDescriptorSets()
         computeWriteDescriptorSets[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         computeWriteDescriptorSets[1].descriptorCount = 1;
         computeWriteDescriptorSets[1].pBufferInfo = &uboDescriptor;
+
+        computeWriteDescriptorSets[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        computeWriteDescriptorSets[2].dstBinding = 2;
+        computeWriteDescriptorSets[2].dstSet = computeDescriptorSets[i];
+        computeWriteDescriptorSets[2].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+        computeWriteDescriptorSets[2].descriptorCount = 1;
+        computeWriteDescriptorSets[2].pImageInfo = &spheremapDescriptor;
+
+        computeWriteDescriptorSets[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        computeWriteDescriptorSets[3].dstBinding = 3;
+        computeWriteDescriptorSets[3].dstSet = computeDescriptorSets[i];
+        computeWriteDescriptorSets[3].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+        computeWriteDescriptorSets[3].descriptorCount = 1;
+        computeWriteDescriptorSets[3].pImageInfo = &samplerDescriptor;
 
         vkUpdateDescriptorSets(device->logicalDevice, static_cast<uint32_t>(computeWriteDescriptorSets.size()), computeWriteDescriptorSets.data(), 0, nullptr);
     }
@@ -606,196 +560,6 @@ void BlackHoleSim::createComputeStorageImage()
     computeStorageImage.createImage(device->logicalDevice, device->physicalDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 }
 
-//void BlackHoleSim::createGraphicsPipeline()
-//{
-//    VkDescriptorSetLayoutBinding uboLayoutBinding{};
-//    uboLayoutBinding.binding = 0;
-//    uboLayoutBinding.descriptorCount = 1;
-//    uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-//    uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-//
-//    std::array<VkDescriptorSetLayoutBinding, 1> bindings = {
-//        uboLayoutBinding
-//    };
-//
-//    VkDescriptorSetLayoutCreateInfo layoutInfo{};
-//    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-//    layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-//    layoutInfo.pBindings = bindings.data();
-//
-//    VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device->logicalDevice, &layoutInfo, nullptr, &graphicsDescriptorSetLayout));
-//
-//    VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
-//    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-//    pipelineLayoutInfo.setLayoutCount = 1;
-//    pipelineLayoutInfo.pSetLayouts = &graphicsDescriptorSetLayout;
-//    pipelineLayoutInfo.pushConstantRangeCount = 0;
-//    pipelineLayoutInfo.pPushConstantRanges = nullptr;
-//
-//    VK_CHECK_RESULT(vkCreatePipelineLayout(device->logicalDevice, &pipelineLayoutInfo, nullptr, &graphicsPipelineLayout));
-//
-//    VkShaderModule vertShaderModule = vks::tools::loadSlangShader(device->logicalDevice, slangGlobalSession, "shaders/shader.slang", "vertexMain");
-//    VkShaderModule fragShaderModule = vks::tools::loadSlangShader(device->logicalDevice, slangGlobalSession, "shaders/shader.slang", "fragmentMain");
-//
-//    /*VkShaderModule vertShaderModule = vks::tools::loadShader("shaders/shader.vert.spv", device->logicalDevice);
-//    VkShaderModule fragShaderModule = vks::tools::loadShader("shaders/shader.frag.spv", device->logicalDevice);*/
-//
-//    VkPipelineShaderStageCreateInfo vertShaderStageCI{};
-//    vertShaderStageCI.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-//    vertShaderStageCI.stage = VK_SHADER_STAGE_VERTEX_BIT;
-//    vertShaderStageCI.module = vertShaderModule;
-//    vertShaderStageCI.pName = "main";
-//    VkPipelineShaderStageCreateInfo fragShaderStageCI{};
-//    fragShaderStageCI.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-//    fragShaderStageCI.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-//    fragShaderStageCI.module = fragShaderModule;
-//    fragShaderStageCI.pName = "main";
-//
-//    std::array<VkPipelineShaderStageCreateInfo, 2> shaderStages = {
-//        vertShaderStageCI,
-//        fragShaderStageCI
-//    };
-//
-//    auto bindingDescription = Vertex::getBindingDescription();
-//    auto attribDescription = Vertex::getAttributeDescriptions();
-//
-//    VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
-//    vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-//    vertexInputInfo.vertexBindingDescriptionCount = 1;
-//    vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attribDescription.size());
-//    vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
-//    vertexInputInfo.pVertexAttributeDescriptions = attribDescription.data();
-//
-//    VkPipelineInputAssemblyStateCreateInfo inputAssemblyCI{};
-//    inputAssemblyCI.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-//    inputAssemblyCI.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-//    inputAssemblyCI.primitiveRestartEnable = VK_FALSE;
-//
-//    VkPipelineViewportStateCreateInfo viewportStateCI{};
-//    viewportStateCI.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-//    viewportStateCI.viewportCount = 1;
-//    viewportStateCI.scissorCount = 1;
-//
-//    VkPipelineRasterizationStateCreateInfo rasterizerStateCI{};
-//    rasterizerStateCI.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-//    rasterizerStateCI.depthClampEnable = VK_FALSE;
-//    rasterizerStateCI.polygonMode = VK_POLYGON_MODE_FILL;
-//    rasterizerStateCI.lineWidth = 1.0f;
-//    rasterizerStateCI.cullMode = VK_CULL_MODE_NONE;
-//    rasterizerStateCI.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-//    rasterizerStateCI.depthBiasEnable = VK_FALSE;
-//    rasterizerStateCI.depthBiasConstantFactor = 0.0f;
-//    rasterizerStateCI.depthBiasClamp = 0.0f;
-//    rasterizerStateCI.depthBiasSlopeFactor = 0.0f;
-//
-//    VkPipelineMultisampleStateCreateInfo multisamplingStateCI{};
-//    multisamplingStateCI.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-//    multisamplingStateCI.sampleShadingEnable = VK_FALSE;
-//    multisamplingStateCI.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-//    multisamplingStateCI.minSampleShading = 1.0f;
-//    multisamplingStateCI.pSampleMask = nullptr;
-//    multisamplingStateCI.alphaToCoverageEnable = VK_FALSE;
-//    multisamplingStateCI.alphaToOneEnable = VK_FALSE;
-//
-//    VkPipelineColorBlendAttachmentState colorBlendAttachment{};
-//    colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-//    colorBlendAttachment.blendEnable = VK_FALSE;
-//    colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE; // Optional
-//    colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional
-//    colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD; // Optional
-//    colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE; // Optional
-//    colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional
-//    colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD; // Optional
-//
-//    VkPipelineColorBlendStateCreateInfo colorBlendingStateCI{};
-//    colorBlendingStateCI.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-//    colorBlendingStateCI.logicOpEnable = VK_FALSE;
-//    colorBlendingStateCI.logicOp = VK_LOGIC_OP_COPY; // Optional;
-//    colorBlendingStateCI.attachmentCount = 1;
-//    colorBlendingStateCI.pAttachments = &colorBlendAttachment;
-//    colorBlendingStateCI.blendConstants[0] = 0.0f; // Optional
-//    colorBlendingStateCI.blendConstants[1] = 0.0f; // Optional
-//    colorBlendingStateCI.blendConstants[2] = 0.0f; // Optional
-//    colorBlendingStateCI.blendConstants[3] = 0.0f; // Optional
-//
-//    VkPipelineDepthStencilStateCreateInfo depthStencilStateCI{};
-//    depthStencilStateCI.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-//    depthStencilStateCI.depthTestEnable = VK_TRUE;
-//    depthStencilStateCI.depthWriteEnable = VK_TRUE;
-//    depthStencilStateCI.depthCompareOp = VK_COMPARE_OP_LESS;
-//
-//    depthStencilStateCI.depthBoundsTestEnable = VK_FALSE;
-//    depthStencilStateCI.minDepthBounds = 0.0f; // Optional
-//    depthStencilStateCI.maxDepthBounds = 1.0f; // Optional
-//
-//    depthStencilStateCI.stencilTestEnable = VK_FALSE;
-//    depthStencilStateCI.front = {}; // Optional
-//    depthStencilStateCI.back = {}; // Optional
-//
-//    std::vector<VkDynamicState> dynamicStates = {
-//        VK_DYNAMIC_STATE_VIEWPORT,
-//        VK_DYNAMIC_STATE_SCISSOR
-//    };
-//    VkPipelineDynamicStateCreateInfo dynamicState{};
-//    dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-//    dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
-//    dynamicState.pDynamicStates = dynamicStates.data();
-//
-//    VkFormat depthFormat{};
-//    vks::tools::getSupportedDepthFormat(device->physicalDevice, &depthFormat);
-//
-//    // dynamic rendering info
-//    VkPipelineRenderingCreateInfoKHR pipelineRenderingCI{ VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR };
-//    pipelineRenderingCI.colorAttachmentCount = 1;
-//    pipelineRenderingCI.pColorAttachmentFormats = &swapchain->colorFormat;
-//    pipelineRenderingCI.depthAttachmentFormat = depthFormat;
-//    pipelineRenderingCI.stencilAttachmentFormat = depthFormat;
-//
-//    VkGraphicsPipelineCreateInfo pipelineCI{ VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
-//    pipelineCI.layout = graphicsPipelineLayout;
-//    pipelineCI.stageCount = static_cast<uint32_t>(shaderStages.size());
-//    pipelineCI.pStages = shaderStages.data();
-//    pipelineCI.pVertexInputState = &vertexInputInfo;
-//    pipelineCI.pInputAssemblyState = &inputAssemblyCI;
-//    pipelineCI.pViewportState = &viewportStateCI;
-//    pipelineCI.pRasterizationState = &rasterizerStateCI;
-//    pipelineCI.pMultisampleState = &multisamplingStateCI;
-//    pipelineCI.pDepthStencilState = &depthStencilStateCI;
-//    pipelineCI.pColorBlendState = &colorBlendingStateCI;
-//    pipelineCI.pDynamicState = &dynamicState;
-//    pipelineCI.pNext = &pipelineRenderingCI;
-//
-//    VK_CHECK_RESULT(vkCreateGraphicsPipelines(device->logicalDevice, VK_NULL_HANDLE, 1, &pipelineCI, nullptr, &graphicsPipeline));
-//
-//    vkDestroyShaderModule(device->logicalDevice, vertShaderModule, nullptr);
-//    vkDestroyShaderModule(device->logicalDevice, fragShaderModule, nullptr);
-//
-//    allocateDescriptorSets(device->logicalDevice, descriptorPool, graphicsDescriptorSetLayout, MAX_CONCURRENT_FRAMES, graphicsDescriptorSets);
-//    
-//    for (uint32_t i = 0; i < MAX_CONCURRENT_FRAMES; i++)
-//    {
-//        updateGraphicsDescriptorSet(i, frameUBO[i].buffer);
-//    }
-//}
-
-//void BlackHoleSim::updateGraphicsDescriptorSet(uint32_t currentFrameIndex, VkBuffer uboBuffer)
-//{
-//    VkDescriptorBufferInfo uboInfo{};
-//    uboInfo.buffer = uboBuffer;
-//    uboInfo.offset = 0;
-//    uboInfo.range = sizeof(ShaderData);
-//
-//    std::array<VkWriteDescriptorSet, 1> descriptorWrites{};
-//    descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-//    descriptorWrites[0].dstSet = graphicsDescriptorSets[currentFrameIndex];
-//    descriptorWrites[0].dstBinding = 0;
-//    descriptorWrites[0].dstArrayElement = 0;
-//    descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-//    descriptorWrites[0].descriptorCount = 1;
-//    descriptorWrites[0].pBufferInfo = &uboInfo;
-//
-//    vkUpdateDescriptorSets(device->logicalDevice, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
-//}
 
 void BlackHoleSim::initializeFrameUbo()
 {
@@ -834,7 +598,9 @@ void BlackHoleSim::createDescriptorPool()
 {
     std::vector<VkDescriptorPoolSize> poolSizes = {
         { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MAX_CONCURRENT_FRAMES },
-        { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, MAX_CONCURRENT_FRAMES }
+        { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, MAX_CONCURRENT_FRAMES },
+        { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, MAX_CONCURRENT_FRAMES },
+        { VK_DESCRIPTOR_TYPE_SAMPLER, MAX_CONCURRENT_FRAMES}
     };
     
     VkDescriptorPoolCreateInfo poolCI{};
@@ -847,106 +613,207 @@ void BlackHoleSim::createDescriptorPool()
     VK_CHECK_RESULT(vkCreateDescriptorPool(device->logicalDevice, &poolCI, nullptr, &descriptorPool));
 }
 
-//void BlackHoleSim::createDepthResources()
-//{
-//    VkFormat depthFormat{};
-//    vks::tools::getSupportedDepthFormat(device->physicalDevice, &depthFormat);
-//
-//    //depthImage.imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-//    depthImage.imageInfo.imageType = VK_IMAGE_TYPE_2D;
-//    depthImage.imageInfo.extent.width = swapchain->extent.width;
-//    depthImage.imageInfo.extent.height = swapchain->extent.height;
-//    depthImage.imageInfo.extent.depth = 1;
-//    depthImage.imageInfo.mipLevels = 1;
-//    depthImage.imageInfo.arrayLayers = 1;
-//    depthImage.imageInfo.format = depthFormat;
-//    depthImage.imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-//    depthImage.imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-//    depthImage.imageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-//    depthImage.imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-//    depthImage.imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-//    depthImage.imageInfo.flags = 0;
-//
-//    depthImage.viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-//    //depthImage.viewInfo.image = depthImage;
-//    depthImage.viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-//    depthImage.viewInfo.format = depthFormat;
-//
-//    depthImage.viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-//    depthImage.viewInfo.subresourceRange.baseMipLevel = 0;
-//    depthImage.viewInfo.subresourceRange.levelCount = 1;
-//    depthImage.viewInfo.subresourceRange.baseArrayLayer = 0;
-//    depthImage.viewInfo.subresourceRange.layerCount = 1;
-//
-//    depthImage.createImage(device->logicalDevice, device->physicalDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-//}
-//
-//void BlackHoleSim::createVertexBuffer()
-//{
-//    VkDeviceSize bufferSize = sizeof(Vertex) * vertices.size();
-//
-//    vks::Buffer staging;
-//    staging.create(
-//        device->logicalDevice,
-//        device->physicalDevice,
-//        bufferSize,
-//        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-//        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-//    );
-//    staging.map();
-//    memcpy(staging.mapped, vertices.data(), (size_t)bufferSize);
-//    staging.unmap();
-//
-//    vertexBuffer.create(
-//        device->logicalDevice,
-//        device->physicalDevice,
-//        bufferSize,
-//        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-//        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-//    );
-//
-//    VkCommandBuffer cmdBuffer = vks::tools::beginSingleTimeCommands(device->logicalDevice, device->transferCommandPool);
-//    VkBufferCopy copyRegion{};
-//    copyRegion.size = bufferSize;
-//    vkCmdCopyBuffer(cmdBuffer, staging.buffer, vertexBuffer.buffer, 1, &copyRegion);
-//    vks::tools::endSingleTimeCommands(cmdBuffer, device->logicalDevice, device->transferQueue, device->transferCommandPool);
-//
-//    staging.destroy();
-//}
-//
-//void BlackHoleSim::createIndexBuffer()
-//{
-//    VkDeviceSize bufferSize = sizeof(uint32_t) * indices.size();
-//
-//    vks::Buffer staging;
-//    staging.create(
-//        device->logicalDevice,
-//        device->physicalDevice,
-//        bufferSize,
-//        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-//        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-//    );
-//    staging.map();
-//    memcpy(staging.mapped, indices.data(), (size_t)bufferSize);
-//    staging.unmap();
-//
-//    indexBuffer.create(
-//        device->logicalDevice,
-//        device->physicalDevice,
-//        bufferSize,
-//        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-//        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-//    );
-//
-//    VkCommandBuffer cmdBuffer = vks::tools::beginSingleTimeCommands(device->logicalDevice, device->transferCommandPool);
-//    VkBufferCopy copyRegion{};
-//    copyRegion.size = bufferSize;
-//    vkCmdCopyBuffer(cmdBuffer, staging.buffer, indexBuffer.buffer, 1, &copyRegion);
-//    vks::tools::endSingleTimeCommands(cmdBuffer, device->logicalDevice, device->transferQueue, device->transferCommandPool);
-//
-//    staging.destroy();
-//}
+void BlackHoleSim::loadEnvironmentTextures()
+{
+    int texWidth, texHeight, texChannels;
+    float* pixels = stbi_loadf("assets/HDR_rich_multi_nebulae_2.hdr", &texWidth, &texHeight, &texChannels, 4);
 
+    if (!pixels)
+    {
+        std::cerr << "Failed to load HDR Texture!" << std::endl;
+        createDummyHDRTexture(spheremapTexture);
+        return;
+    }
 
+    VkDeviceSize imageSize = texWidth * texHeight * 4 * sizeof(float);
 
+    vks::Buffer stagingBuffer;
+    stagingBuffer.create(
+        device->logicalDevice,
+        device->physicalDevice,
+        imageSize,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+    );
+    stagingBuffer.map();
+    memcpy(stagingBuffer.mapped, pixels, imageSize);
+    stagingBuffer.unmap();
+
+    spheremapTexture.imageInfo.imageType = VK_IMAGE_TYPE_2D;
+    spheremapTexture.imageInfo.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+    spheremapTexture.imageInfo.extent = { (uint32_t)texWidth, (uint32_t)texHeight, 1 };
+    spheremapTexture.imageInfo.mipLevels = 1;
+    spheremapTexture.imageInfo.arrayLayers = 1;
+    spheremapTexture.imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    spheremapTexture.imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    spheremapTexture.imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    spheremapTexture.imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+    spheremapTexture.viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    spheremapTexture.viewInfo.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+    spheremapTexture.viewInfo.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+
+    spheremapTexture.createImage(device->logicalDevice, device->physicalDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+    VkCommandBuffer copyCmd = vks::tools::beginSingleTimeCommands(device->logicalDevice, device->graphicsCommandPool);
+    
+    vks::tools::insertImageMemoryBarrier(
+        copyCmd,
+        spheremapTexture.image,
+        0,
+        VK_ACCESS_TRANSFER_WRITE_BIT,
+        VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
+    );
+
+    VkBufferImageCopy region{};
+    region.bufferOffset = 0;
+    region.bufferRowLength = 0;
+    region.bufferImageHeight = 0;
+    region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    region.imageSubresource.mipLevel = 0;
+    region.imageSubresource.baseArrayLayer = 0;
+    region.imageSubresource.layerCount = 1;
+    region.imageOffset = { 0, 0, 0 };
+    region.imageExtent = { (uint32_t)texWidth, (uint32_t)texHeight, 1 };
+
+    vkCmdCopyBufferToImage(
+        copyCmd,
+        stagingBuffer.buffer,
+        spheremapTexture.image,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        1,
+        &region
+    );
+
+    vks::tools::insertImageMemoryBarrier(
+        copyCmd,
+        spheremapTexture.image,
+        VK_ACCESS_TRANSFER_WRITE_BIT,
+        VK_ACCESS_SHADER_READ_BIT,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
+    );
+
+    vks::tools::endSingleTimeCommands(copyCmd, device->logicalDevice, device->graphicsQueue, device->graphicsCommandPool);
+
+    stagingBuffer.destroy();
+    stbi_image_free(pixels);
+
+    std::cout << "Loaded HDR TEXTURE" << std::endl;
+}
+
+void BlackHoleSim::createDummyHDRTexture(vks::Image& texture)
+{
+    float pixel[4] = { 0.0f, 0.0f, 0.0f, 1.0f }; // Black in RGBA float
+
+    vks::Buffer stagingBuffer;
+    stagingBuffer.create(
+        device->logicalDevice, 
+        device->physicalDevice,
+        sizeof(pixel), 
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+    );
+    stagingBuffer.map();
+    memcpy(stagingBuffer.mapped, pixel, sizeof(pixel));
+    stagingBuffer.unmap();
+
+    texture.imageInfo.imageType = VK_IMAGE_TYPE_2D;
+    texture.imageInfo.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+    texture.imageInfo.extent = { 1, 1, 1 };
+    texture.imageInfo.mipLevels = 1;
+    texture.imageInfo.arrayLayers = 1;
+    texture.imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    texture.imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    texture.imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    texture.imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+    texture.viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    texture.viewInfo.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+    texture.viewInfo.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+
+    texture.createImage(device->logicalDevice, device->physicalDevice,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+    VkCommandBuffer copyCmd = vks::tools::beginSingleTimeCommands(device->logicalDevice, device->graphicsCommandPool);
+
+    vks::tools::insertImageMemoryBarrier(
+        copyCmd,
+        texture.image,
+        0,
+        VK_ACCESS_TRANSFER_WRITE_BIT,
+        VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
+    );
+
+    VkBufferImageCopy region{};
+    region.bufferOffset = 0;
+    region.bufferRowLength = 0;
+    region.bufferImageHeight = 0;
+    region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    region.imageSubresource.mipLevel = 0;
+    region.imageSubresource.baseArrayLayer = 0;
+    region.imageSubresource.layerCount = 1;
+    region.imageOffset = { 0, 0, 0 };
+    region.imageExtent = { 1, 1, 1 };
+
+    vkCmdCopyBufferToImage(
+        copyCmd,
+        stagingBuffer.buffer,
+        texture.image,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        1,
+        &region
+    );
+
+    vks::tools::insertImageMemoryBarrier(
+        copyCmd,
+        texture.image,
+        VK_ACCESS_TRANSFER_WRITE_BIT,
+        VK_ACCESS_SHADER_READ_BIT,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
+    );
+
+    vks::tools::endSingleTimeCommands(copyCmd, device->logicalDevice, device->graphicsQueue, device->graphicsCommandPool);
+
+    stagingBuffer.destroy();
+
+    std::cout << "Loaded DUMMY HDR TEXTURE" << std::endl;
+}
+
+void BlackHoleSim::createEnvironmentSampler()
+{
+    VkSamplerCreateInfo samplerInfo{};
+    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    samplerInfo.magFilter = VK_FILTER_LINEAR;
+    samplerInfo.minFilter = VK_FILTER_LINEAR;
+    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerInfo.anisotropyEnable = VK_TRUE;
+    samplerInfo.maxAnisotropy = 16.0f;
+    samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+    samplerInfo.unnormalizedCoordinates = VK_FALSE;
+    samplerInfo.compareEnable = VK_FALSE;
+    samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    samplerInfo.mipLodBias = 0.0f;
+    samplerInfo.minLod = 0.0f;
+    samplerInfo.maxLod = 1.0f;
+
+    VK_CHECK_RESULT(vkCreateSampler(device->logicalDevice, &samplerInfo, nullptr, &environmentSampler));
+}
 

@@ -96,14 +96,11 @@ private:
 	void createIndexBuffer();
 	vks::Buffer indexBuffer;*/
 
+	void loadEnvironmentTextures();
+	void createDummyHDRTexture(vks::Image& texture);
+	void createEnvironmentSampler();
+	vks::Image spheremapTexture;
+	VkSampler environmentSampler;
 
-
-	// triangle test
-	/*const std::vector<Vertex> vertices{
-			{ {  1.0f,  1.0f, 0.0f }, { 1.0f, 0.0f, 0.0f } },
-			{ { -1.0f,  1.0f, 0.0f }, { 0.0f, 1.0f, 0.0f } },
-			{ {  0.0f, -1.0f, 0.0f }, { 0.0f, 0.0f, 1.0f } }
-	};
-	std::vector<uint32_t> indices{ 0, 1, 2 };*/
 };
 

@@ -81,6 +81,12 @@ struct ShaderData {
 	alignas(16) glm::mat4 inverseProjectionMatrix;
 	alignas(16) glm::mat4 inverseViewMatrix;
 	alignas(16) glm::vec3 cameraPosition;
+
+	alignas(4) float time;
+	alignas(4) int backgroundType = 1;
+
+	alignas(4) float exposure = 1.0f;
+	alignas(4) float gamma = 2.2f;
 };
 
 struct UIPacket {
