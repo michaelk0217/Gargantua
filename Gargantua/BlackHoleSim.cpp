@@ -53,18 +53,64 @@ void BlackHoleSim::initVulkan()
 
     createSyncPrimitives();
 
-    camera = std::make_unique<Camera>();
-    camera->type = Camera::CameraType::lookat;
-    camera->setPosition(glm::vec3(0.0f, 0.0f, -2.5f));
-    camera->setRotation(glm::vec3(0.0f));
-    camera->setPerspective(60.0f, (float)width / (float)height, 1.0f, 500.0f);
+    camera = std::make_unique<Camera>(
+        glm::vec3(-10.0f, 0.0, 0.0), // pos
+        glm::vec3(0.0f, 1.0f, 0.0f), // worldupvector: set to y-up
+        0.0f, // yaw : look along x axis
+        0.0f, // pitch
+        10.0f, // movementSpeed
+        0.1f, // turnspeed
+        60.0f, // fov
+        (float)width / (float)height,
+        0.1f,
+        500.0f
+    );
+    //camera->type = Camera::CameraType::firstperson;
+    //camera->setPosition(glm::vec3(0.0f, 0.0f, -2.5f));
+    //camera->setRotation(glm::vec3(0.0f));
+    //camera->setPerspective(60.0f, (float)width / (float)height, 1.0f, 500.0f);
+    //camera->setRotationSpeed(3.0f);
+    //camera->setMovementSpeed(5.0f);
+    //camera->flipY = false;
+
+    uiOverlay = std::make_unique<UIOverlay>(*window, *device, *swapchain);
 }
 
 void BlackHoleSim::mainLoop()
 {
+    auto lastTime = std::chrono::high_resolution_clock::now();
+    frame_history.resize(90, 0); // keeps track of 90 recent frame rates
     while (window && !window->shouldClose())
     {
+        // delta time
+        auto currentTime = std::chrono::high_resolution_clock::now();
+        float deltaTime = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - lastTime).count();
+        lastTime = currentTime;
+
+        UIOverlay::update_frame_history(frame_history, 1.0f / deltaTime);
+
         window->pollEvents();
+        processInput(deltaTime);
+
+        /*glm::vec3 forwardDir;
+        forwardDir.x = -cos(glm::radians(camera->rotation.x)) * sin(glm::radians(camera->rotation.y));
+        forwardDir.y = sin(glm::radians(camera->rotation.x));
+        forwardDir.z = cos(glm::radians(camera->rotation.x)) * cos(glm::radians(camera->rotation.y));
+        forwardDir = glm::normalize(forwardDir);*/
+
+        /*glm::mat4 invView = glm::inverse(camera->matrices.view);
+        glm::vec3 forwardDir = -glm::normalize(glm::vec3(invView[2]));*/
+
+        glm::vec3 forwardDir = camera->getCameraDirection();
+
+        UIPacket uiPacket{
+            deltaTime,
+            frame_history,
+            forwardDir
+        };
+        uiOverlay->newFrame();
+        uiOverlay->buildUI(uiPacket);
+
         drawFrame();
     }
 }
@@ -73,15 +119,17 @@ void BlackHoleSim::cleanUp()
 {
     vkDeviceWaitIdle(device->logicalDevice);
 
+    uiOverlay.reset();
+
     for (size_t i = 0; i < presentCompleteSemaphores.size(); i++) vkDestroySemaphore(device->logicalDevice, presentCompleteSemaphores[i], nullptr);
     for (size_t i = 0; i < renderCompleteSemaphores.size(); i++) vkDestroySemaphore(device->logicalDevice, renderCompleteSemaphores[i], nullptr);
     for (uint32_t i = 0; i < MAX_CONCURRENT_FRAMES; i++) vkDestroyFence(device->logicalDevice, waitFences[i], nullptr);
 
 
     //depthImage.destroy();
-
     //indexBuffer.destroy();
     //vertexBuffer.destroy();
+
     computeStorageImage.destroy();
     cleanupComputePipeline();
 
@@ -121,9 +169,13 @@ void BlackHoleSim::drawFrame()
     //updateGraphicsDescriptorSet(currentFrame, frameUBO[currentFrame].buffer);
 
     ShaderData shaderData{};
-    shaderData.projectionMatrix = camera->matrices.perspective;
-    shaderData.viewMatrix = camera->matrices.view;
+    shaderData.projectionMatrix = camera->getProjectionMatrix();
+    shaderData.viewMatrix = camera->calculateViewMatrix();
     shaderData.modelMatrix = glm::mat4(1.0f);
+
+    shaderData.inverseProjectionMatrix = glm::inverse(camera->getProjectionMatrix());
+    shaderData.inverseViewMatrix = glm::inverse(camera->calculateViewMatrix());
+    shaderData.cameraPosition = camera->getCameraPosition();
 
     frameUBO[currentFrame].copyTo(&shaderData, sizeof(ShaderData));
 
@@ -198,15 +250,30 @@ void BlackHoleSim::drawFrame()
         &imageCopyRegion
     );
 
-    // transition swapchain image backt o be presentable
+    // transition swapchian image to be color attachment for ui overlay
     vks::tools::insertImageMemoryBarrier(
         commandBuffer,
         swapchain->images[imageIndex],
         VK_ACCESS_TRANSFER_WRITE_BIT,
-        0,
+        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
+    );
+    
+    uiOverlay->render(commandBuffer, imageIndex, width, height);
+
+    // transition swapchain image back to be presentable
+    vks::tools::insertImageMemoryBarrier(
+        commandBuffer,
+        swapchain->images[imageIndex],
+        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        0,
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
         VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
         VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
     );
@@ -300,8 +367,8 @@ void BlackHoleSim::drawFrame()
 
     VK_CHECK_RESULT(vkEndCommandBuffer(commandBuffer));
 
-    //VkPipelineStageFlags waitStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    VkPipelineStageFlags waitStageMask = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+    VkPipelineStageFlags waitStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    //VkPipelineStageFlags waitStageMask = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.pWaitDstStageMask = &waitStageMask;
@@ -351,13 +418,47 @@ void BlackHoleSim::windowResize()
     swapchain = std::make_unique<VulkanSwapchain>(device->instance, device->surface, device->logicalDevice, device->physicalDevice, window->getGlfwWindow());
     swapchain->create(this->width, this->height);
     createComputeStorageImage();
-    //computeStorageImage.createImage(device->logicalDevice, device->physicalDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     updateComputeDescriptorSets();
 
     // depthResource recreate
     //createDepthResources();
 
-    camera->setPerspective(60.0f, (float)width / (float)height, 1.0f, 500.0f);
+    //camera->setPerspective(60.0f, (float)width / (float)height, 1.0f, 500.0f);
+    camera->setAspectRatio((float)width / (float)height);
+}
+
+void BlackHoleSim::processInput(float deltaTime)
+{
+    if (window->isMouseButtonPressed(GLFW_MOUSE_BUTTON_MIDDLE))
+    {
+        camera->processKeyboard(window->getKeys(), deltaTime);
+        glfwSetInputMode(window->getGlfwWindow(), GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        camera->processMouseMovement(window->getXChange(), window->getYChange(), true);
+        //// mouse movement delta
+        //float xChange = window->getXChange();
+        //float yChange = window->getYChange();
+
+        //float sensitivity = camera->rotationSpeed * deltaTime * 100.0f;
+
+        //glm::vec3 rotationDelta;
+        //rotationDelta.y = xChange * sensitivity; // horizontal mouse movement
+        //rotationDelta.x = -yChange * sensitivity; // vertical
+        //rotationDelta.z = 0.0f; // no roll rotation
+
+        //camera->rotate(rotationDelta);
+
+        //camera->keys.up = window->isKeyPressed(GLFW_KEY_W);
+        //camera->keys.down = window->isKeyPressed(GLFW_KEY_S);
+        //camera->keys.left = window->isKeyPressed(GLFW_KEY_A);
+        //camera->keys.right = window->isKeyPressed(GLFW_KEY_D);
+
+        //camera->update(deltaTime);
+    }
+    else
+    {
+        glfwSetInputMode(window->getGlfwWindow(), GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+    }
+    
 }
 
 void BlackHoleSim::createSyncPrimitives()
@@ -670,6 +771,11 @@ void BlackHoleSim::createComputeStorageImage()
 //    vkDestroyShaderModule(device->logicalDevice, fragShaderModule, nullptr);
 //
 //    allocateDescriptorSets(device->logicalDevice, descriptorPool, graphicsDescriptorSetLayout, MAX_CONCURRENT_FRAMES, graphicsDescriptorSets);
+//    
+//    for (uint32_t i = 0; i < MAX_CONCURRENT_FRAMES; i++)
+//    {
+//        updateGraphicsDescriptorSet(i, frameUBO[i].buffer);
+//    }
 //}
 
 //void BlackHoleSim::updateGraphicsDescriptorSet(uint32_t currentFrameIndex, VkBuffer uboBuffer)
@@ -774,7 +880,7 @@ void BlackHoleSim::createDescriptorPool()
 //
 //    depthImage.createImage(device->logicalDevice, device->physicalDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 //}
-
+//
 //void BlackHoleSim::createVertexBuffer()
 //{
 //    VkDeviceSize bufferSize = sizeof(Vertex) * vertices.size();
@@ -807,7 +913,7 @@ void BlackHoleSim::createDescriptorPool()
 //
 //    staging.destroy();
 //}
-
+//
 //void BlackHoleSim::createIndexBuffer()
 //{
 //    VkDeviceSize bufferSize = sizeof(uint32_t) * indices.size();

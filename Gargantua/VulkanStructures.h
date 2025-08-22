@@ -77,4 +77,14 @@ struct ShaderData {
 	alignas(16) glm::mat4 projectionMatrix;
 	alignas(16) glm::mat4 modelMatrix;
 	alignas(16) glm::mat4 viewMatrix;
+
+	alignas(16) glm::mat4 inverseProjectionMatrix;
+	alignas(16) glm::mat4 inverseViewMatrix;
+	alignas(16) glm::vec3 cameraPosition;
+};
+
+struct UIPacket {
+	float& deltaTime;
+	std::vector<float>& frameHistory;
+	glm::vec3& cameraDirection;
 };

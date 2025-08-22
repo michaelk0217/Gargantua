@@ -1,14 +1,17 @@
 // Uniform buffer structure
-struct UniformBufferObject
+struct ShaderData
 {
-    column_major float4x4 proj;
-    column_major float4x4 model;
-    column_major float4x4 view;
-}
+    column_major float4x4 projectionMatrix;
+    column_major float4x4 modelMatrix;
+    column_major float4x4 viewMatrix;
+    column_major float4x4 inverseProjectionMatrix;
+    column_major float4x4 inverseViewMatrix;
+    float3 cameraPosition;
+};
 
 // Uniform buffer binding
 [[vk::binding(0, 0)]]
-ConstantBuffer<UniformBufferObject> ubo;
+ConstantBuffer<ShaderData> ubo;
 
 // Vertex shader input structure
 struct VertexInput
@@ -29,10 +32,10 @@ struct VertexOutput
 VertexOutput vertexMain(VertexInput input)
 {
     VertexOutput output;
-    
-    float4 worldPos = mul(ubo.model, float4(input.position, 1.0));
-    float4 viewPos = mul(ubo.view, worldPos);
-    output.position = mul(ubo.proj, viewPos);
+
+    float4 worldPos = mul(ubo.modelMatrix, float4(input.position, 1.0));
+    float4 viewPos = mul(ubo.viewMatrix, worldPos);
+    output.position = mul(ubo.projectionMatrix, viewPos);
 
     output.color = input.color;
     

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <chrono>
 
 #include <vulkan/vulkan.h>
 #include <slang/slang.h>
@@ -12,7 +13,7 @@
 
 #include "Window.h"
 #include "Camera.hpp"
-
+#include "UIOverlay.h"
 
 class BlackHoleSim
 {
@@ -26,6 +27,8 @@ private:
 	bool resized = false;
 	uint32_t currentFrame = 0;
 	static const uint32_t MAX_CONCURRENT_FRAMES = 2;
+	
+	std::vector<float> frame_history;
 
 	// slang global session
 	slang::IGlobalSession* slangGlobalSession;
@@ -38,6 +41,8 @@ private:
 	std::vector<VkCommandBuffer> frameCommandBuffers;
 	//std::vector<VkCommandBuffer> computeCommandBuffers;
 
+	std::unique_ptr<UIOverlay> uiOverlay;
+
 	// ------ main functions ------
 	void initGlfwWindow();
 	void initVulkan();
@@ -46,6 +51,7 @@ private:
 	// ----------------------------
 	void drawFrame();
 	void windowResize();
+	void processInput(float deltaTime);
 
 
 	// ------ SYNC OBJECTS ------
@@ -82,13 +88,13 @@ private:
 	void createDescriptorPool();
 	VkDescriptorPool descriptorPool;
 
-	//void createDepthResources();
-	//vks::Image depthImage;
+	/*void createDepthResources();
+	vks::Image depthImage;*/
 
-	//void createVertexBuffer();
-	//vks::Buffer vertexBuffer;
-	//void createIndexBuffer();
-	//vks::Buffer indexBuffer;
+	/*void createVertexBuffer();
+	vks::Buffer vertexBuffer;
+	void createIndexBuffer();
+	vks::Buffer indexBuffer;*/
 
 
 
