@@ -60,8 +60,7 @@ float3 sampleBackground(float3 direction)
     float3 color = float3(0.0);
     if (ubo.backgroundType == 0) // procedural
     {
-        // //rainbow
-        // color = direction * 0.5 + 0.5;
+       
 
         // Procedural starfield
         float2 sphericalUV = directionToSphericalUV(direction);
@@ -104,6 +103,11 @@ float3 sampleBackground(float3 direction)
         float2 uv = directionToEquirectangularUV(direction);
         
         color = spheremapTexture.SampleLevel(environmentSampler, uv, 0).rgb;
+    }
+    else if (ubo.backgroundType == 2)
+    {
+         // //rainbow
+        color = direction * 0.5 + 0.5;
     }
 
     return color;

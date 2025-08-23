@@ -140,9 +140,9 @@ void UIOverlay::buildUI(UIPacket& uiPacket)
         ImGui::SliderFloat("##Mass", &uiPacket.blackHoleMass, 0.1f, 5.0f, "%0.1f");
 
         ImGui::Text("Spin Parameter");
-        if (ImGui::Button("Max -Spin")) uiPacket.blackHoleSpin = -0.999f;
-        ImGui::SameLine();
+        
         ImGui::SliderFloat("##Spin", &uiPacket.blackHoleSpin, -0.999, 0.999f, "%.3f");
+        if (ImGui::Button("Max -Spin")) uiPacket.blackHoleSpin = -0.999f;
         ImGui::SameLine();
         if (ImGui::Button("Max Spin")) uiPacket.blackHoleSpin = 0.999f;
 
@@ -151,7 +151,7 @@ void UIOverlay::buildUI(UIPacket& uiPacket)
         ImGui::SliderFloat("##StepSize", &uiPacket.stepSize, 0.01f, 1.0f, "Step: %.2f");
 
         ImGui::Text("Background");
-        const char* backgroundTypes[] = { "Procedural", "HDR Environment" };
+        const char* backgroundTypes[] = { "Procedural", "HDR Environment", "Color Spectrum"};
         ImGui::Combo("##Background", &uiPacket.backgroundType, backgroundTypes, IM_ARRAYSIZE(backgroundTypes));
 
         ImGui::Text("Geodesic Computation");
