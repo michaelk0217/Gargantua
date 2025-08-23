@@ -114,7 +114,7 @@ void UIOverlay::buildUI(UIPacket& uiPacket)
             uiPacket.cameraDirection.y,
             uiPacket.cameraDirection.z);
 
-        glm::vec3 centerColor = uiPacket.cameraDirection * 0.5f + 0.5f;
+        /*glm::vec3 centerColor = uiPacket.cameraDirection * 0.5f + 0.5f;
 
         ImGui::Text("Center Color (RGB): (%.2f, %.2f, %.2f)",
             centerColor.r,
@@ -124,7 +124,55 @@ void UIOverlay::buildUI(UIPacket& uiPacket)
         ImGui::ColorButton("Center Color Swatch",
             ImVec4(centerColor.r, centerColor.g, centerColor.b, 1.0f),
             ImGuiColorEditFlags_NoTooltip,
-            ImVec2(ImGui::GetContentRegionAvail().x, 20));
+            ImVec2(ImGui::GetContentRegionAvail().x, 20));*/
+    }
+    ImGui::End();
+    //ImGui::PopStyleColor();
+
+    ImGui::SetNextWindowPos(ImVec2(20, 20), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(400, 350), ImGuiCond_Always);
+    if (ImGui::Begin("Black Hole Controls", nullptr, ImGuiWindowFlags_None))
+    {
+        ImGui::Text("Gargantua Parameters");
+        ImGui::Separator();
+
+        ImGui::Text("Black hole Mass");
+        ImGui::SliderFloat("##Mass", &uiPacket.blackHoleMass, 0.1f, 5.0f, "%0.1f");
+
+        ImGui::Text("Spin Parameter");
+        if (ImGui::Button("Max -Spin")) uiPacket.blackHoleSpin = -0.999f;
+        ImGui::SameLine();
+        ImGui::SliderFloat("##Spin", &uiPacket.blackHoleSpin, -0.999, 0.999f, "%.3f");
+        ImGui::SameLine();
+        if (ImGui::Button("Max Spin")) uiPacket.blackHoleSpin = 0.999f;
+
+        ImGui::Text("Ray Marching Quality");
+        ImGui::SliderInt("##MaxSteps", &uiPacket.maxSteps, 10, 500, "%d steps");
+        ImGui::SliderFloat("##StepSize", &uiPacket.stepSize, 0.01f, 1.0f, "Step: %.2f");
+
+        ImGui::Text("Background");
+        const char* backgroundTypes[] = { "Procedural", "HDR Environment" };
+        ImGui::Combo("##Background", &uiPacket.backgroundType, backgroundTypes, IM_ARRAYSIZE(backgroundTypes));
+
+        ImGui::Text("Geodesic Computation");
+        const char* geodesicComps[] = { "Simple", "4th Order RK" };
+        ImGui::Combo("##Compute Type", &uiPacket.geodesicType, geodesicComps, IM_ARRAYSIZE(geodesicComps));
+
+        // presets
+        ImGui::Separator();
+        if (ImGui::Button("Interstellar Preset")) {
+            uiPacket.blackHoleMass = 1.0f;
+            uiPacket.blackHoleSpin = 0.6f;
+            uiPacket.maxSteps = 150;
+            uiPacket.stepSize = 0.15f;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Reset Defaults")) {
+            uiPacket.blackHoleMass = 1.0f;
+            uiPacket.blackHoleSpin = 0.0f;
+            uiPacket.maxSteps = 100;
+            uiPacket.stepSize = 0.2f;
+        }
     }
     ImGui::End();
     ImGui::PopStyleColor();

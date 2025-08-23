@@ -83,14 +83,27 @@ struct ShaderData {
 	alignas(16) glm::vec3 cameraPosition;
 
 	alignas(4) float time;
-	alignas(4) int backgroundType = 1;
+	alignas(4) int backgroundType = 0;
 
 	alignas(4) float exposure = 1.0f;
 	alignas(4) float gamma = 2.2f;
+
+	alignas(4) float blackHoleMass = 1.0f;
+	alignas(4) float blackHoleSpin = 0.6f;
+	alignas(4) int maxSteps = 100;
+	alignas(4) float stepSize = 0.2f;
+	alignas(4) int geodesicType = 0;
 };
 
 struct UIPacket {
 	float& deltaTime;
 	std::vector<float>& frameHistory;
 	glm::vec3& cameraDirection;
+
+	float& blackHoleMass;
+	float& blackHoleSpin;
+	int& maxSteps;
+	float& stepSize;
+	int& backgroundType;
+	int& geodesicType;
 };

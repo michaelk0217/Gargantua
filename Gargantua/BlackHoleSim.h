@@ -102,5 +102,13 @@ private:
 	vks::Image spheremapTexture;
 	VkSampler environmentSampler;
 
+
+	// UI Controlled Parameters
+	float blackHoleMass = 1.0f;
+	float blackHoleSpin = 0.6f;
+	int maxSteps = 100;
+	float stepSize = 0.2f;
+	int backgroundType = 0;
+	int geodesicType = 0;
 };
 

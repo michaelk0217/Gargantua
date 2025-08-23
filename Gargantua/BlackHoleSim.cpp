@@ -86,6 +86,14 @@ void BlackHoleSim::mainLoop()
 {
     auto lastTime = std::chrono::high_resolution_clock::now();
     frame_history.resize(90, 0); // keeps track of 90 recent frame rates
+
+    blackHoleMass = 1.0f;
+    blackHoleSpin = 0.6f;
+    maxSteps = 100;
+    stepSize = 0.2f;
+    backgroundType = 0;
+    geodesicType = 0;
+
     while (window && !window->shouldClose())
     {
         // delta time
@@ -112,7 +120,13 @@ void BlackHoleSim::mainLoop()
         UIPacket uiPacket{
             deltaTime,
             frame_history,
-            forwardDir
+            forwardDir,
+            blackHoleMass,
+            blackHoleSpin,
+            maxSteps,
+            stepSize,
+            backgroundType,
+            geodesicType
         };
         uiOverlay->newFrame();
         uiOverlay->buildUI(uiPacket);
@@ -184,6 +198,13 @@ void BlackHoleSim::drawFrame()
     shaderData.inverseProjectionMatrix = glm::inverse(camera->getProjectionMatrix());
     shaderData.inverseViewMatrix = glm::inverse(camera->calculateViewMatrix());
     shaderData.cameraPosition = camera->getCameraPosition();
+
+    shaderData.blackHoleMass = blackHoleMass;
+    shaderData.blackHoleSpin = blackHoleSpin;
+    shaderData.maxSteps = maxSteps;
+    shaderData.stepSize = stepSize;
+    shaderData.backgroundType = backgroundType;
+    shaderData.geodesicType = geodesicType;
 
     frameUBO[currentFrame].copyTo(&shaderData, sizeof(ShaderData));
 
