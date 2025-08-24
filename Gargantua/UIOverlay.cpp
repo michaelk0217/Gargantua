@@ -158,6 +158,12 @@ void UIOverlay::buildUI(UIPacket& uiPacket)
         const char* geodesicComps[] = { "Simple", "4th Order RK" };
         ImGui::Combo("##Compute Type", &uiPacket.geodesicType, geodesicComps, IM_ARRAYSIZE(geodesicComps));
 
+        ImGui::Text("Accretion Disk Parameters");
+        ImGui::Separator();
+        if (ImGui::Button("Toggle Disk")) {
+            uiPacket.diskEnable = !uiPacket.diskEnable;
+        }
+
         // presets
         ImGui::Separator();
         if (ImGui::Button("Interstellar Preset")) {

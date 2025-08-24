@@ -50,8 +50,15 @@ void BlackHoleSim::initVulkan()
 
     loadEnvironmentTextures();
     createEnvironmentSampler();
+
+    createNoiseResources(NOISE_SIZE, VK_FORMAT_R16_SFLOAT);
+    generateNoise3D(NOISE_SIZE);
+
+
+    // ====== main compute pipeline ======
     createComputeStorageImage();
     createComputePipeline();
+    // ===================================
 
     //createVertexBuffer();
     //createIndexBuffer();
@@ -84,6 +91,7 @@ void BlackHoleSim::initVulkan()
 
 void BlackHoleSim::mainLoop()
 {
+
     auto lastTime = std::chrono::high_resolution_clock::now();
     frame_history.resize(90, 0); // keeps track of 90 recent frame rates
 
@@ -93,6 +101,9 @@ void BlackHoleSim::mainLoop()
     stepSize = 0.2f;
     backgroundType = 0;
     geodesicType = 0;
+    diskEnable = false;
+
+   
 
     while (window && !window->shouldClose())
     {
@@ -100,6 +111,7 @@ void BlackHoleSim::mainLoop()
         auto currentTime = std::chrono::high_resolution_clock::now();
         float deltaTime = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - lastTime).count();
         lastTime = currentTime;
+        totalElapsedTime += deltaTime;
 
         UIOverlay::update_frame_history(frame_history, 1.0f / deltaTime);
 
@@ -126,10 +138,13 @@ void BlackHoleSim::mainLoop()
             maxSteps,
             stepSize,
             backgroundType,
-            geodesicType
+            geodesicType,
+            diskEnable
         };
         uiOverlay->newFrame();
         uiOverlay->buildUI(uiPacket);
+
+
 
         drawFrame();
     }
@@ -150,6 +165,7 @@ void BlackHoleSim::cleanUp()
     //indexBuffer.destroy();
     //vertexBuffer.destroy();
 
+    destroyNoiseResources();
     spheremapTexture.destroy();
     vkDestroySampler(device->logicalDevice, environmentSampler, nullptr);
     computeStorageImage.destroy();
@@ -203,8 +219,12 @@ void BlackHoleSim::drawFrame()
     shaderData.blackHoleSpin = blackHoleSpin;
     shaderData.maxSteps = maxSteps;
     shaderData.stepSize = stepSize;
+
+    shaderData.time = totalElapsedTime;
     shaderData.backgroundType = backgroundType;
     shaderData.geodesicType = geodesicType;
+
+    shaderData.diskEnable = diskEnable ? 1 : 0;
 
     frameUBO[currentFrame].copyTo(&shaderData, sizeof(ShaderData));
 
@@ -378,25 +398,6 @@ void BlackHoleSim::processInput(float deltaTime)
         camera->processKeyboard(window->getKeys(), deltaTime);
         glfwSetInputMode(window->getGlfwWindow(), GLFW_CURSOR, GLFW_CURSOR_DISABLED);
         camera->processMouseMovement(window->getXChange(), window->getYChange(), true);
-        //// mouse movement delta
-        //float xChange = window->getXChange();
-        //float yChange = window->getYChange();
-
-        //float sensitivity = camera->rotationSpeed * deltaTime * 100.0f;
-
-        //glm::vec3 rotationDelta;
-        //rotationDelta.y = xChange * sensitivity; // horizontal mouse movement
-        //rotationDelta.x = -yChange * sensitivity; // vertical
-        //rotationDelta.z = 0.0f; // no roll rotation
-
-        //camera->rotate(rotationDelta);
-
-        //camera->keys.up = window->isKeyPressed(GLFW_KEY_W);
-        //camera->keys.down = window->isKeyPressed(GLFW_KEY_S);
-        //camera->keys.left = window->isKeyPressed(GLFW_KEY_A);
-        //camera->keys.right = window->isKeyPressed(GLFW_KEY_D);
-
-        //camera->update(deltaTime);
     }
     else
     {
@@ -434,7 +435,7 @@ void BlackHoleSim::createSyncPrimitives()
 
 void BlackHoleSim::createComputePipeline()
 {
-    std::array<VkDescriptorSetLayoutBinding, 4> layoutBindings{};
+    std::array<VkDescriptorSetLayoutBinding, 6> layoutBindings{};
     layoutBindings[0].binding = 0;
     layoutBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
     layoutBindings[0].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
@@ -454,6 +455,17 @@ void BlackHoleSim::createComputePipeline()
     layoutBindings[3].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
     layoutBindings[3].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
     layoutBindings[3].descriptorCount = 1;
+
+    layoutBindings[4].binding = 4;
+    layoutBindings[4].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    layoutBindings[4].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    layoutBindings[4].descriptorCount = 1;
+
+    layoutBindings[5].binding = 5;
+    layoutBindings[5].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+    layoutBindings[5].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    layoutBindings[5].descriptorCount = 1;
+
 
     VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCI{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
     descriptorSetLayoutCI.bindingCount = static_cast<uint32_t>(layoutBindings.size());
@@ -501,10 +513,17 @@ void BlackHoleSim::updateComputeDescriptorSets()
         spheremapDescriptor.imageView = spheremapTexture.imageView;
         spheremapDescriptor.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         
-        VkDescriptorImageInfo samplerDescriptor{};
-        samplerDescriptor.sampler = environmentSampler;
+        VkDescriptorImageInfo environmentSamplerDescriptor{};
+        environmentSamplerDescriptor.sampler = environmentSampler;
 
-        std::array<VkWriteDescriptorSet, 4> computeWriteDescriptorSets{};
+        VkDescriptorImageInfo noise3dImageInfo{};
+        noise3dImageInfo.imageView = noiseTexture3D.imageView;
+        noise3dImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        VkDescriptorImageInfo noise3dSamplerDescriptor{};
+        noise3dSamplerDescriptor.sampler = noiseSampler;
+
+        std::array<VkWriteDescriptorSet, 6> computeWriteDescriptorSets{};
         computeWriteDescriptorSets[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         computeWriteDescriptorSets[0].dstBinding = 0;
         computeWriteDescriptorSets[0].dstSet = computeDescriptorSets[i];
@@ -531,7 +550,21 @@ void BlackHoleSim::updateComputeDescriptorSets()
         computeWriteDescriptorSets[3].dstSet = computeDescriptorSets[i];
         computeWriteDescriptorSets[3].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
         computeWriteDescriptorSets[3].descriptorCount = 1;
-        computeWriteDescriptorSets[3].pImageInfo = &samplerDescriptor;
+        computeWriteDescriptorSets[3].pImageInfo = &environmentSamplerDescriptor;
+
+        computeWriteDescriptorSets[4].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        computeWriteDescriptorSets[4].dstBinding = 4;
+        computeWriteDescriptorSets[4].dstSet = computeDescriptorSets[i];
+        computeWriteDescriptorSets[4].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+        computeWriteDescriptorSets[4].descriptorCount = 1;
+        computeWriteDescriptorSets[4].pImageInfo = &noise3dImageInfo;
+
+        computeWriteDescriptorSets[5].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        computeWriteDescriptorSets[5].dstBinding = 5;
+        computeWriteDescriptorSets[5].dstSet = computeDescriptorSets[i];
+        computeWriteDescriptorSets[5].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+        computeWriteDescriptorSets[5].descriptorCount = 1;
+        computeWriteDescriptorSets[5].pImageInfo = &noise3dSamplerDescriptor;
 
         vkUpdateDescriptorSets(device->logicalDevice, static_cast<uint32_t>(computeWriteDescriptorSets.size()), computeWriteDescriptorSets.data(), 0, nullptr);
     }
@@ -618,10 +651,10 @@ void BlackHoleSim::allocateDescriptorSets(VkDevice device, VkDescriptorPool desc
 void BlackHoleSim::createDescriptorPool()
 {
     std::vector<VkDescriptorPoolSize> poolSizes = {
-        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MAX_CONCURRENT_FRAMES },
-        { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, MAX_CONCURRENT_FRAMES },
-        { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, MAX_CONCURRENT_FRAMES },
-        { VK_DESCRIPTOR_TYPE_SAMPLER, MAX_CONCURRENT_FRAMES}
+        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MAX_CONCURRENT_FRAMES + 1 },
+        { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, MAX_CONCURRENT_FRAMES  + 1},
+        { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, MAX_CONCURRENT_FRAMES * 2 },
+        { VK_DESCRIPTOR_TYPE_SAMPLER, MAX_CONCURRENT_FRAMES * 2}
     };
     
     VkDescriptorPoolCreateInfo poolCI{};
@@ -629,7 +662,7 @@ void BlackHoleSim::createDescriptorPool()
     poolCI.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
     poolCI.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
     poolCI.pPoolSizes = poolSizes.data();
-    poolCI.maxSets = MAX_CONCURRENT_FRAMES * 2;
+    poolCI.maxSets = MAX_CONCURRENT_FRAMES * 2 + 1;
 
     VK_CHECK_RESULT(vkCreateDescriptorPool(device->logicalDevice, &poolCI, nullptr, &descriptorPool));
 }
@@ -836,5 +869,187 @@ void BlackHoleSim::createEnvironmentSampler()
     samplerInfo.maxLod = 1.0f;
 
     VK_CHECK_RESULT(vkCreateSampler(device->logicalDevice, &samplerInfo, nullptr, &environmentSampler));
+}
+
+void BlackHoleSim::createNoiseResources(int size, VkFormat format)
+{
+
+    // Create image resources
+    noiseTexture3D.imageInfo.imageType = VK_IMAGE_TYPE_3D;
+    noiseTexture3D.imageInfo.extent = { (uint32_t)size, (uint32_t)size, (uint32_t)size };
+    noiseTexture3D.imageInfo.mipLevels = 1;
+    noiseTexture3D.imageInfo.arrayLayers = 1;
+    noiseTexture3D.imageInfo.format = format;
+    noiseTexture3D.imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    noiseTexture3D.imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    noiseTexture3D.imageInfo.usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    noiseTexture3D.imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+    noiseTexture3D.viewInfo.viewType = VK_IMAGE_VIEW_TYPE_3D;
+    noiseTexture3D.viewInfo.format = format;
+    noiseTexture3D.viewInfo.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+
+    noiseTexture3D.createImage(device->logicalDevice, device->physicalDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+    VkSamplerCreateInfo samplerCI{};
+    samplerCI.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    samplerCI.magFilter = VK_FILTER_LINEAR;
+    samplerCI.minFilter = VK_FILTER_LINEAR;
+    samplerCI.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerCI.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerCI.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerCI.anisotropyEnable = VK_FALSE;
+    samplerCI.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
+    samplerCI.unnormalizedCoordinates = VK_FALSE;
+    samplerCI.compareEnable = VK_FALSE;
+    samplerCI.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    samplerCI.minLod = 0.0f;
+    samplerCI.maxLod = 0.0f;
+
+    VK_CHECK_RESULT(vkCreateSampler(device->logicalDevice, &samplerCI, nullptr, &noiseSampler));
+
+    // create noise param ubo
+    noiseUBO.create(
+        device->logicalDevice,
+        device->physicalDevice,
+        sizeof(NoiseUboParams),
+        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+    );
+    noiseUBO.map();
+
+
+    std::array<VkDescriptorSetLayoutBinding, 2> layoutBindings{};
+
+    layoutBindings[0].binding = 0;
+    layoutBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    layoutBindings[0].descriptorCount = 1;
+    layoutBindings[0].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+    layoutBindings[1].binding = 1;
+    layoutBindings[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    layoutBindings[1].descriptorCount = 1;
+    layoutBindings[1].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+
+    VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCI{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
+    descriptorSetLayoutCI.bindingCount = static_cast<uint32_t>(layoutBindings.size());
+    descriptorSetLayoutCI.pBindings = layoutBindings.data();
+    VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device->logicalDevice, &descriptorSetLayoutCI, nullptr, &noiseDescriptorSetLayout));
+
+    VkPipelineLayoutCreateInfo pipelineLayoutCI{ VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
+    pipelineLayoutCI.pSetLayouts = &noiseDescriptorSetLayout;
+    pipelineLayoutCI.setLayoutCount = 1;
+    VK_CHECK_RESULT(vkCreatePipelineLayout(device->logicalDevice, &pipelineLayoutCI, nullptr, &noiseComputePipelineLayout));
+
+    VkShaderModule computeShader = vks::tools::loadSlangShader(device->logicalDevice, slangGlobalSession, "shaders/noise3d.slang", "main");
+
+    VkPipelineShaderStageCreateInfo shaderStage{ VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
+    shaderStage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+    shaderStage.module = computeShader;
+    shaderStage.pName = "main";
+
+    VkComputePipelineCreateInfo computePipelineCI{ VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO };
+    computePipelineCI.layout = noiseComputePipelineLayout;
+    computePipelineCI.stage = shaderStage;
+    VK_CHECK_RESULT(vkCreateComputePipelines(device->logicalDevice, VK_NULL_HANDLE, 1, &computePipelineCI, nullptr, &noiseComputePipeline));
+
+    vkDestroyShaderModule(device->logicalDevice, computeShader, nullptr);
+
+    VkDescriptorSetAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = descriptorPool;
+    allocInfo.descriptorSetCount = 1;
+    allocInfo.pSetLayouts = &noiseDescriptorSetLayout;
+
+    VK_CHECK_RESULT(vkAllocateDescriptorSets(device->logicalDevice, &allocInfo, &noiseComputeDescriptorSet));
+
+    VkDescriptorImageInfo storageImageDescriptor{};
+    storageImageDescriptor.imageView = noiseTexture3D.imageView;
+    storageImageDescriptor.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+    VkDescriptorBufferInfo uboDescriptor{};
+    uboDescriptor.buffer = noiseUBO.buffer;
+    uboDescriptor.offset = 0;
+    uboDescriptor.range = sizeof(NoiseUboParams);
+
+    std::array<VkWriteDescriptorSet, 2> writeDescriptorSets{};
+    writeDescriptorSets[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writeDescriptorSets[0].dstBinding = 0;
+    writeDescriptorSets[0].dstSet = noiseComputeDescriptorSet;
+    writeDescriptorSets[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    writeDescriptorSets[0].descriptorCount = 1;
+    writeDescriptorSets[0].pImageInfo = &storageImageDescriptor;
+
+    writeDescriptorSets[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writeDescriptorSets[1].dstBinding = 1;
+    writeDescriptorSets[1].dstSet = noiseComputeDescriptorSet;
+    writeDescriptorSets[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    writeDescriptorSets[1].descriptorCount = 1;
+    writeDescriptorSets[1].pBufferInfo = &uboDescriptor;
+
+    vkUpdateDescriptorSets(device->logicalDevice, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, nullptr);
+}
+
+void BlackHoleSim::destroyNoiseResources()
+{
+    noiseTexture3D.destroy();
+    vkDestroySampler(device->logicalDevice, noiseSampler, nullptr);
+    noiseUBO.destroy();
+    vkDestroyPipeline(device->logicalDevice, noiseComputePipeline, nullptr);
+    vkDestroyPipelineLayout(device->logicalDevice, noiseComputePipelineLayout, nullptr);
+    vkDestroyDescriptorSetLayout(device->logicalDevice, noiseDescriptorSetLayout, nullptr);
+}
+
+void BlackHoleSim::generateNoise3D(int size)
+{
+    NoiseUboParams params{};
+    params.size = size;
+    params.scale = 4.0f;        
+    params.boost = 1.5f;        
+    params.octaves = 4;         
+    params.tileSize = size;     
+    params.lacunarity = 2.0f;
+    params.gain = 0.5f;
+    params.time = 0.0f;
+
+    noiseUBO.copyTo(&params, sizeof(NoiseUboParams));
+
+    VkCommandBuffer cmd = vks::tools::beginSingleTimeCommands(device->logicalDevice, device->graphicsCommandPool);
+
+    vks::tools::insertImageMemoryBarrier(
+        cmd,
+        noiseTexture3D.image,
+        0,
+        VK_ACCESS_SHADER_WRITE_BIT,
+        VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_GENERAL,
+        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
+    );
+
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, noiseComputePipeline);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, noiseComputePipelineLayout, 0, 1, &noiseComputeDescriptorSet, 0, nullptr);
+    
+    uint32_t groupSize = 8;
+    uint32_t gx = (size + groupSize - 1) / groupSize;
+    uint32_t gy = gx;
+    uint32_t gz = gx;
+    vkCmdDispatch(cmd, gx, gy, gz);
+
+    vks::tools::insertImageMemoryBarrier(
+        cmd,
+        noiseTexture3D.image,
+        VK_ACCESS_SHADER_WRITE_BIT,
+        VK_ACCESS_SHADER_READ_BIT,
+        VK_IMAGE_LAYOUT_GENERAL,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+        VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
+    );
+
+    vks::tools::endSingleTimeCommands(cmd, device->logicalDevice, device->graphicsQueue, device->graphicsCommandPool);
 }
 

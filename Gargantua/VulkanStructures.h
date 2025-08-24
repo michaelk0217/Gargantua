@@ -93,6 +93,41 @@ struct ShaderData {
 	alignas(4) int maxSteps = 100;
 	alignas(4) float stepSize = 0.2f;
 	alignas(4) int geodesicType = 0;
+
+	// accretion disk params
+	alignas(4) int diskEnable = 0;
+	alignas(4) int volSubsteps = 6;
+	alignas(4) float dsVolScale = 1.0f;
+	alignas(4) float sigmaT = 2.0f;
+
+	// parameters scaled by blackholemass default
+	alignas(4) float diskRin = 3.0f * 1.0f; // inner radius ( 3.0 * M )
+	alignas(4) float diskRout = 15.0f * 1.0f; // outer radius 
+	alignas(4) float diskH = 0.1f * 1.0f; // vertical scale height
+	alignas(4) float diskEdgeK = 0.8f * 0.1f; // softness of inner/outer edge
+
+	alignas(4) float diskDensity = 0.3f;
+	alignas(4) float diskNoiseAmp = 0.6f;
+	alignas(4) float diskNoiseScale = 2.5f;
+	alignas(4)float diskNoiseWarp = 0.5f;
+
+	alignas(4) float emissionScale = 3.5f; // overall disk brightness
+	alignas(4) float vScale = 0.6f; // Keplerian seed multiplier
+	alignas(4) float dopplerPower = 0.5f;
+	alignas(4) float temperatureBias = 0.35f;
+
+};
+
+struct NoiseUboParams
+{
+	alignas(4) int size;
+	alignas(4) float scale;
+	alignas(4) float boost;
+	alignas(4) int octaves;
+	alignas(4) int tileSize;
+	alignas(4) float lacunarity;
+	alignas(4) float gain;
+	alignas(4) float time;
 };
 
 struct UIPacket {
@@ -106,4 +141,6 @@ struct UIPacket {
 	float& stepSize;
 	int& backgroundType;
 	int& geodesicType;
+
+	bool& diskEnable;
 };

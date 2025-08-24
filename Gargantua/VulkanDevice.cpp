@@ -227,13 +227,24 @@ void VulkanDevice::createLogicalDevice()
 	deviceFeatures.fillModeNonSolid = VK_TRUE;
 	deviceFeatures.wideLines = VK_TRUE;
 
-	VkPhysicalDeviceDynamicRenderingFeaturesKHR dynamic_rendering_feature{};
-	dynamic_rendering_feature.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR;
-	dynamic_rendering_feature.dynamicRendering = VK_TRUE;
+	/*VkPhysicalDeviceFeatures2 deviceFeatures2{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
+	deviceFeatures2.features.samplerAnisotropy = VK_TRUE;
+	deviceFeatures2.features.tessellationShader = VK_TRUE;
+	deviceFeatures2.features.fillModeNonSolid = VK_TRUE;
+	deviceFeatures2.features.wideLines = VK_TRUE;
+
+	VkPhysicalDeviceComputeShaderDerivativesFeaturesKHR computeDerivativesFeatures = {};
+	computeDerivativesFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMPUTE_SHADER_DERIVATIVES_FEATURES_KHR;
+	computeDerivativesFeatures.computeDerivativeGroupQuads = VK_TRUE;
+	computeDerivativesFeatures.computeDerivativeGroupLinear = VK_TRUE;*/
 
 	VkPhysicalDeviceVulkan13Features vk13Features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES };
 	vk13Features.dynamicRendering = VK_TRUE;
 	vk13Features.synchronization2 = VK_TRUE;
+
+	/*deviceFeatures2.pNext = &vk13Features;
+	vk13Features.pNext = &computeDerivativesFeatures;*/
+	
 
 	VkDeviceCreateInfo createInfo{};
 	createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -242,8 +253,8 @@ void VulkanDevice::createLogicalDevice()
 	createInfo.pEnabledFeatures = &deviceFeatures;
 	createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
 	createInfo.ppEnabledExtensionNames = deviceExtensions.data();
-	//createInfo.pNext = &dynamic_rendering_feature;
 	createInfo.pNext = &vk13Features;
+	//createInfo.pNext = &deviceFeatures2;
 
 	if (enableValidationLayers)
 	{

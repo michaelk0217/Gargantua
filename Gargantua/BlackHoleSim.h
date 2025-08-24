@@ -21,13 +21,14 @@ class BlackHoleSim
 public:
 	void run();
 private:
-	uint32_t width = 2560;
-	uint32_t height = 1440;
+	uint32_t width = 3840;
+	uint32_t height = 2160;
 	const std::string windowTitle = "Gargantua";
 	bool resized = false;
 	uint32_t currentFrame = 0;
 	static const uint32_t MAX_CONCURRENT_FRAMES = 2;
-	
+	float totalElapsedTime = 0.0f;
+
 	std::vector<float> frame_history;
 
 	// slang global session
@@ -102,6 +103,19 @@ private:
 	vks::Image spheremapTexture;
 	VkSampler environmentSampler;
 
+	// noise generationpipeline
+	void createNoiseResources(int size, VkFormat format = VK_FORMAT_R16_SFLOAT);
+	void destroyNoiseResources();
+	vks::Image noiseTexture3D;
+	VkSampler noiseSampler;
+	vks::Buffer noiseUBO;
+	VkDescriptorSetLayout noiseDescriptorSetLayout;
+	VkPipeline noiseComputePipeline;
+	VkPipelineLayout noiseComputePipelineLayout;
+	VkDescriptorSet noiseComputeDescriptorSet;
+	void generateNoise3D(int size);
+	const int NOISE_SIZE = 64;
+
 
 	// UI Controlled Parameters
 	float blackHoleMass = 1.0f;
@@ -110,5 +124,7 @@ private:
 	float stepSize = 0.2f;
 	int backgroundType = 0;
 	int geodesicType = 0;
+
+	bool diskEnable = false;
 };
 
