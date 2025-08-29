@@ -16,11 +16,9 @@ layout(location = 1) in vec3 color;
 layout(location = 0) out vec3 outColor;
 
 void main() {
-    // Calculate the final position in clip space
     vec4 worldPos = ubo.model * vec4(position, 1.0);
     vec4 viewPos = ubo.view * worldPos;
     gl_Position = ubo.proj * viewPos;
     
-    // Pass the input color to the fragment shader
     outColor = color;
 }

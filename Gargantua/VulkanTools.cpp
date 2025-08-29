@@ -1,5 +1,6 @@
 /* This code is from SaschaWillems Vulkan/base/VulkanTools.cpp */
 
+// added couple functions myself.
 
 #include "VulkanTools.h"
 

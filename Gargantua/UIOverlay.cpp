@@ -141,9 +141,9 @@ void UIOverlay::buildUI(UIPacket& uiPacket)
 
         ImGui::Text("Spin Parameter");
         
-        ImGui::SliderFloat("##Spin", &uiPacket.blackHoleSpin, -0.999, 0.999f, "%.3f");
-        if (ImGui::Button("Max -Spin")) uiPacket.blackHoleSpin = -0.999f;
-        ImGui::SameLine();
+        ImGui::SliderFloat("##Spin", &uiPacket.blackHoleSpin, 0.0f, 0.999f, "%.3f");
+        //if (ImGui::Button("Max -Spin")) uiPacket.blackHoleSpin = -0.999f;
+        //ImGui::SameLine();
         if (ImGui::Button("Max Spin")) uiPacket.blackHoleSpin = 0.999f;
 
         ImGui::Text("Ray Marching Quality");

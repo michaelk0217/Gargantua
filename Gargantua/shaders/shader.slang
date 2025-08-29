@@ -1,50 +1,62 @@
-// Uniform buffer structure
-struct ShaderData
-{
-    column_major float4x4 projectionMatrix;
-    column_major float4x4 modelMatrix;
-    column_major float4x4 viewMatrix;
-    column_major float4x4 inverseProjectionMatrix;
-    column_major float4x4 inverseViewMatrix;
-    float3 cameraPosition;
-};
-
-// Uniform buffer binding
-[[vk::binding(0, 0)]]
-ConstantBuffer<ShaderData> ubo;
-
-// Vertex shader input structure
-struct VertexInput
-{
-    [[vk::location(0)]] float3 position : POSITION;
-    [[vk::location(1)]] float3 color : COLOR;
-};
-
-// Vertex shader output / Fragment shader input structure
-struct VertexOutput
+// ================== Post Processing Vertex ==================
+struct PPVSout
 {
     float4 position : SV_Position;
-    [[vk::location(0)]] float3 color : COLOR;
+    float2 uv       : TEXCOORD0;
 };
 
-// Vertex shader entry point
-[shader("vertex")]
-VertexOutput vertexMain(VertexInput input)
+PPVSout PPVertMain(uint vertexId : SV_VertexID)
 {
-    VertexOutput output;
+    float2 positions[3] = {
+        float2(-1.0, -1.0),
+        float2( 3.0, -1.0),
+        float2(-1.0,  3.0)
+    };
 
-    float4 worldPos = mul(ubo.modelMatrix, float4(input.position, 1.0));
-    float4 viewPos = mul(ubo.viewMatrix, worldPos);
-    output.position = mul(ubo.projectionMatrix, viewPos);
-
-    output.color = input.color;
-    
+    PPVSout output;
+    output.position = float4(positions[vertexId], 0.0, 1.0);
+    output.uv = (positions[vertexId] * 0.5) + 0.5; 
     return output;
 }
 
-// Fragment shader entry point
-[shader("fragment")]
-float4 fragmentMain(VertexOutput input) : SV_Target
+// ================== Post Processing Fragment ==================
+Texture2D hdrScene        : register(t0);
+SamplerState hdrSampler   : register(s0);
+
+cbuffer UBO : register(b1)
 {
-    return float4(input.color, 1.0);
+    float exposure;
+    float gamma;
+};
+
+float3 saturate(float3 x)
+{
+    return clamp(x, 0.0, 1.0);
+}
+
+float3 ACESFilm(float3 x)
+{
+    float a = 2.51;
+    float b = 0.03;
+    float c = 2.43;
+    float d = 0.59;
+    float e = 0.14;
+    return saturate((x * (a * x + b)) / (x * (c * x + d) + e));
+}
+
+float4 PPFragMain(PPVSout input) : SV_Target
+{
+    float2 texSize;
+    hdrScene.GetDimensions(texSize.x, texSize.y);
+
+    float2 uv = input.uv;
+    float3 color = hdrScene.Sample(hdrSampler, uv).rgb;
+
+    color *= exposure;
+
+    color = ACESFilm(color);
+
+    color = pow(color, 1.0 / gamma);
+
+    return float4(color, 1.0);
 }

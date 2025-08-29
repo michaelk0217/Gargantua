@@ -21,8 +21,8 @@ class BlackHoleSim
 public:
 	void run();
 private:
-	uint32_t width = 3840;
-	uint32_t height = 2160;
+	uint32_t width = 1960;
+	uint32_t height = 1080;
 	const std::string windowTitle = "Gargantua";
 	bool resized = false;
 	uint32_t currentFrame = 0;
@@ -103,7 +103,7 @@ private:
 	vks::Image spheremapTexture;
 	VkSampler environmentSampler;
 
-	// noise generationpipeline
+	// noise generation pipeline
 	void createNoiseResources(int size, VkFormat format = VK_FORMAT_R16_SFLOAT);
 	void destroyNoiseResources();
 	vks::Image noiseTexture3D;
@@ -116,9 +116,62 @@ private:
 	void generateNoise3D(int size);
 	const int NOISE_SIZE = 64;
 
+	// post processing
+	void createPostProcessResources();
+	void createHDRColorBuffer();
+	void createCompositeOutputImage();
+	void createBloomMipChain();
+	void createPostProcessSamplers();
+	void createPostProcessDescriptorLayouts();
+	void createPostProcessPipelines();
+	void createPostProcessPipelineLayouts();
+	void allocatePostProcessDescriptorSets();
+	void updatePostProcessDescriptorSets();
+	//void createPostProcessUBO();
+	void postProcessWindowResizeRecreate();
+	
+	void cleanupPostProcessResources();
+
+	void performBloomPass(VkCommandBuffer cmd, uint32_t frameIndex);
+	void performFinalComposite(VkCommandBuffer cmd, uint32_t frameIndex, uint32_t swapchainIndex);
+	void initializePPImageLayouts();
+	void ppImageLayoutTransitionNextFrame(VkCommandBuffer cmd);
+
+	struct PostProcessResources {
+		vks::Image hdrColorBuffer;
+		vks::Image brightPassBuffer;
+		vks::Image compositeOutputImage;
+		std::vector<vks::Image> bloomMipChain;  // Downsampled bloom levels
+		vks::Image tempBlurBuffer;
+
+		//std::vector<vks::Buffer> postProcessUBO;
+		
+		VkSampler linearSampler;
+		VkSampler nearestSampler;
+
+		VkDescriptorSetLayout brightExtractLayout;
+		VkDescriptorSetLayout blurLayout;
+		VkDescriptorSetLayout compositeLayout;
+
+		VkPipelineLayout brightExtractPipelineLayout;
+		VkPipelineLayout blurPipelineLayout;
+		VkPipelineLayout compositePipelineLayout;
+
+		VkPipeline brightExtractPipeline;
+		VkPipeline blurHorizontalPipeline;
+		VkPipeline blurVerticalPipeline;
+		VkPipeline compositePipeline;
+
+		// Descriptor sets per frame
+		std::vector<VkDescriptorSet> brightExtractSets; 
+		std::vector<std::vector<VkDescriptorSet>> blurSets;  // [MAX_CONCURRENT_FRAMES][mipLevels]
+		std::vector<VkDescriptorSet> compositeSets;
+
+		static const int BLOOM_MIP_LEVELS = 5;
+	} postProcess;
 
 	// UI Controlled Parameters
-	float blackHoleMass = 1.0f;
+	float blackHoleMass = 0.3f;
 	float blackHoleSpin = 0.6f;
 	int maxSteps = 100;
 	float stepSize = 0.2f;

@@ -8,6 +8,8 @@
 * This code is licensed under the MIT license (MIT) (http://opensource.org/licenses/MIT)
 */
 
+// added create funciton by michael.
+
 #include "VulkanBuffer.h"
 #include "VulkanImage.h"
 

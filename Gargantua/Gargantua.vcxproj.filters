@@ -139,5 +139,18 @@
     <None Include="shaders\raymarcher.slang">
       <Filter>Shaders</Filter>
     </None>
+    <None Include="shaders\bloom_extract.slang">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\gaussian_blur.slang">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\noise3d.slang">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\post_composite.slang">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="..\README.md" />
   </ItemGroup>
 </Project>

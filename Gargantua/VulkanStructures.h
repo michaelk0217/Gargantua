@@ -96,24 +96,24 @@ struct ShaderData {
 
 	// accretion disk params
 	alignas(4) int diskEnable = 0;
-	alignas(4) int volSubsteps = 6;
+	alignas(4) int volSubsteps = 4;
 	alignas(4) float dsVolScale = 1.0f;
 	alignas(4) float sigmaT = 2.0f;
 
 	// parameters scaled by blackholemass default
 	alignas(4) float diskRin = 3.0f * 1.0f; // inner radius ( 3.0 * M )
-	alignas(4) float diskRout = 15.0f * 1.0f; // outer radius 
+	alignas(4) float diskRout = 30.0f * 1.0f; // outer radius 
 	alignas(4) float diskH = 0.1f * 1.0f; // vertical scale height
-	alignas(4) float diskEdgeK = 0.8f * 0.1f; // softness of inner/outer edge
+	alignas(4) float diskEdgeK = 3.0f * 0.1f; // softness of inner/outer edge
 
-	alignas(4) float diskDensity = 0.3f;
+	alignas(4) float diskDensity = 0.5f;
 	alignas(4) float diskNoiseAmp = 0.6f;
 	alignas(4) float diskNoiseScale = 2.5f;
-	alignas(4)float diskNoiseWarp = 0.5f;
+	alignas(4) float diskNoiseWarp = 0.5f;
 
-	alignas(4) float emissionScale = 3.5f; // overall disk brightness
+	alignas(4) float emissionScale = 2.0f; // overall disk brightness
 	alignas(4) float vScale = 0.6f; // Keplerian seed multiplier
-	alignas(4) float dopplerPower = 0.5f;
+	alignas(4) float dopplerPower = 2.0f;
 	alignas(4) float temperatureBias = 0.35f;
 
 };
@@ -129,6 +129,50 @@ struct NoiseUboParams
 	alignas(4) float gain;
 	alignas(4) float time;
 };
+
+struct PostProcessParams {
+	// Bloom extraction
+	alignas(4) float bloomThreshold;    // Minimum brightness to extract
+	alignas(4) float bloomSoftKnee;     // Soft transition (0-1)
+	alignas(4) float bloomIntensity;    // Bloom strength multiplier
+	alignas(4) int currentMipLevel;     // For blur passes
+
+	// Blur parameters
+	alignas(4) int blurDirection;       // 0 = vertical, 1 = horizontal
+	alignas(4) float texelSizeX;        // 1.0 / texture width
+	alignas(4) float texelSizeY;        // 1.0 / texture height
+	alignas(4) float padding1;          // Alignment padding
+
+	// Tone mapping & final composite
+	alignas(4) float exposure;          // HDR exposure
+	alignas(4) float gamma;            // Gamma correction
+	alignas(8) float padding2[2];      // Align to 16 bytes
+};
+
+struct BloomExtractParams
+{
+	alignas(4) float threshold;
+	alignas(4) float softKnee;
+	alignas(4) float intensity;
+	alignas(4) float padding;
+};
+
+struct GaussianBlurParams
+{
+	alignas(4) int mipLevel;
+	alignas(4) int blurDirection;
+	alignas(4) float texelSizeX;
+	alignas(4) float texelSizeY;
+};
+
+struct CompositeParams
+{
+	//alignas(4) float bloomIntensity;
+	alignas(4) float exposure;
+	alignas(4) float gamma;
+	alignas(8) float padding[2];
+};
+
 
 struct UIPacket {
 	float& deltaTime;

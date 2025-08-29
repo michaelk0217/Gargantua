@@ -24,7 +24,7 @@ uint hash3D(int3 p)
 
 float3 perlinGradient(int3 p, int period)
 {
-    int3 ip = (p % period + period) % period;                         // Proper wrapping for tiling
+    int3 ip = (p % period + period) % period;                 
     float rand = frac(float(hash3D(ip)) * 0.00000011920928955078125); // 1/2^23
     float theta = rand * 6.2831853;
     float phi = acos(2.0 * frac(rand * 1.37) - 1.0);
@@ -41,7 +41,6 @@ float perlinNoise3D(float3 p, int period)
     float3 pi = floor(p);
     float3 pf = frac(p);
     
-    // Calculate gradients at 8 corners of the cube
     float dots[8];
     for (int i = 0; i < 8; i++)
     {
@@ -51,10 +50,9 @@ float perlinNoise3D(float3 p, int period)
         dots[i] = dot(grad, dist);
     }
     
-    // Smooth interpolation
     float3 f = fade(pf);
     
-    // Trilinear interpolation
+    // trilinear interpolation
     float x1 = lerp(dots[0], dots[1], f.x);
     float x2 = lerp(dots[2], dots[3], f.x);
     float x3 = lerp(dots[4], dots[5], f.x);
@@ -82,7 +80,7 @@ float fbm3(float3 p, int octaves, float lacunarity, float gain, int basePeriod)
         amp *= gain;
     }
     
-    return value / totalAmp;  // Normalize by total amplitude
+    return value / totalAmp;  // normalize
 }
 
 [numthreads(8, 8, 8)]

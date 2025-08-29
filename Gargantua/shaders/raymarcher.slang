@@ -43,7 +43,7 @@ struct ShaderData
 
 };
 
-layout(binding = 0) RWTexture2D<float4> storageImage;
+layout(binding = 0) RWTexture2D<float4> hdrColorBuffer;
 layout(binding = 1) ConstantBuffer<ShaderData> ubo;
 layout(binding = 2) Texture2D<float4> spheremapTexture;
 layout(binding = 3) SamplerState environmentSampler;
@@ -84,43 +84,8 @@ float3 sampleBackground(float3 direction)
     float3 color = float3(0.0);
     if (ubo.backgroundType == 0) // procedural
     {
-       
+        sampleProcedural(direction, color);
 
-        // Procedural starfield
-        float2 sphericalUV = directionToSphericalUV(direction);
-        
-        float stars = 0.0;
-        for (int i = 0; i < 5; i++) {
-            float2 gridUV = sphericalUV * (50.0 + i * 30.0);
-            float2 gridID = floor(gridUV);
-            float2 gridPos = frac(gridUV) - 0.5;
-            
-            // Pseudo-random per grid cell
-            float rand = frac(sin(dot(gridID, float2(12.9898, 78.233))) * 43758.5453);
-            
-            if (rand > 0.98) {
-                float dist = length(gridPos);
-                float star = 1.0 - smoothstep(0.0, 0.05 / (1.0 + i), dist);
-                stars += star * (0.5 + 0.5 * rand);
-            }
-        }
-        
-        float milkyway = 1.0 - abs(direction.y);
-        milkyway = pow(milkyway, 4.0) * 0.3;
-        
-        // Deep space blue-purple gradient
-        float3 deepSpace = lerp(
-            // float3(0.02, 0.02, 0.05),
-            // float3(0.05, 0.03, 0.1),
-            // float3(0.22, 0.13, 0.30),
-            // float3(0.09, 0.09, 0.26),
-            float3(0.0, 0.0, 0.02),
-            float3(0.01, 0.02, 0.08),
-            abs(direction.y)
-        );
-        
-        color = deepSpace + float3(stars) + float3(0.4, 0.3, 0.6) * milkyway;
-        color = color.bgr;
     }
     else if (ubo.backgroundType == 1) // spheremap hdr
     {
@@ -135,6 +100,41 @@ float3 sampleBackground(float3 direction)
     }
 
     return color;
+}
+
+
+void sampleProcedural(float3 direction, out float3 color)
+{
+    // Procedural starfield
+    float2 sphericalUV = directionToSphericalUV(direction);
+
+    float stars = 0.0;
+    for (int i = 0; i < 10; i++) {
+        float2 gridUV = sphericalUV * (50.0 + i * 30.0);
+        float2 gridID = floor(gridUV);
+        float2 gridPos = frac(gridUV) - 0.5;
+
+        float rand = frac(sin(dot(gridID, float2(12.9898, 78.233))) * 43758.5453);
+
+        if (rand > 0.98) {
+            float dist = length(gridPos);
+            float star = 1.0 - smoothstep(0.0, 0.05 / (1.0 + i), dist);
+            stars += star * (0.5 + 0.5 * rand);
+        }
+    }
+
+    float milkyway = 1.0 - abs(direction.y);
+    milkyway = pow(milkyway, 4.0) * 0.3;
+
+    float3 deepSpace = lerp(
+        float3(0.0, 0.0, 0.03),
+        float3(0.0, 0.0, 0.1),
+        abs(direction.y)
+    );
+
+    // color = deepSpace + float3(stars) + float3(0.4, 0.3, 0.6) * milkyway;
+    // color = deepSpace + float3(stars) + float3(0.4, 0.3, 0.6);
+    color = deepSpace + float3(stars);
 }
 
 // ------ tone mapping functions for hdr ------
@@ -270,138 +270,7 @@ RayState integrateGeodesicSimple(RayState state, float stepSize, float a, float 
     return state;
 }
 
-// float computeRedshift(float r, float theta, float a, float M, float3 cameraPos, float3 rayDir)
-// {
-//     KerrMetricComponents metric = computeKerrMetric(r, theta, a, M);
-    
-//     // Gravitational redshift: 1/α
-//     float gravitationalRedshift = 1.0 / metric.alpha;
-    
-//     // simplified - should be relative to cmaera 4-vel
-//     float dopplerEffect = 1.0 + 0.1 * dot(normalize(cameraPos), rayDir);
-    
-//     return gravitationalRedshift * dopplerEffect;
-// }
-
-// float3 applyFrequencyShifts(float3 color, float redshift)
-// {
-//     if (redshift > 1.0)
-//     {
-//         // redshift
-//         color = lerp(color, float3(color.r * 1.8, color.g * 0.6, color.b * 0.4), saturate(1.0 - redshift));
-//     }
-//     else
-//     {
-//         color = lerp(color, float3(color.r * 0.4, color.g * 0.6, color.b * 1.8), saturate(1.0 - redshift));
-//     }
-//     return color;
-// }
-
-// ------ Accretion Volumetric rendering helpers ------
-
-
-float3 rotateY(float3 v, float angle)
-{
-    float s = sin(angle), c = cos(angle);
-    return float3(c * v.x + s * v.z, v.y, -s * v.x + c * v.z);
-}
-
-float remap(float x, float a, float b, float c, float d)
-{
-    float t = saturate((x - a) / max(b - a, 1e-6));
-    return lerp(c, d, t);
-}
-
-float3 diskColorRamp(float t)
-{
-    // t = 0 outer (cool), t = 1 inner (hot)
-    float3 cool = float3(0.95, 0.45, 0.25);
-    float3 hot = float3(1.0, 0.98, 0.92);
-    return lerp(cool, hot, saturate(t));
-}
-
-void sampelDiskAt(
-    float3 p,
-    float3 rayDirLocal,
-    float M, float a,
-    float time,
-    out float rho,
-    out float3 emissive
-)
-{
-    // Cylindrical coords around +Y spin axis
-    float2 xz = float2(p.x, p.z);
-    float rperp = length(xz);
-    float h = p.y;
-
-    // Radial soft annulus
-    float inner = smoothstep(ubo.diskRin, ubo.diskRin + ubo.diskEdgeK, rperp);
-    float outer = 1.0 - smoothstep(ubo.diskRout - ubo.diskEdgeK, ubo.diskRout, rperp);
-    float radialMask = saturate(inner * outer);
-
-    // Vertical gaussian thickness
-    float vertical = exp(-(h*h) / max(2.0 * ubo.diskH * ubo.diskH, 1e-6));
-
-    // base density
-    float base = ubo.diskDensity * radialMask * vertical;
-
-    // azimuthal advection (simple keplerian omega ~ v/r)
-    float rSafe = max(rperp, 1e-3);
-    float vK = saturate(sqrt(M / rSafe)) * ubo.vScale;
-    float omega = (rSafe > 0.0) ? (vK / rSafe) : 0.0;
-    float advectAngle = omega * time;
-
-    // sample pos for noise w mild warping
-    float3 pn = rotateY(p, advectAngle);
-    pn *= ubo.diskNoiseScale;
-    // float nBase = fbm3(pn, 4, 2.03, 0.52);
-    // float3 pw = pn + ubo.diskNoiseWarp * float3(
-    //     fbm3(pn + 11.3, 3, 2.07, 0.55),
-    //     fbm3(pn + 27.1, 3, 2.07, 0.55),
-    //     fbm3(pn + 41.7, 3, 2.07, 0.55)
-    // );
-    // float nDetail = fbm3(pw, 3, 2.13, 0.5);
-
-    float nBase = noiseTexture.SampleLevel(noiseSampler, pn, 0).r;
-    float3 warpOffset = float3(
-        noiseTexture.SampleLevel(noiseSampler, pn + 11.3, 0).r - 0.5,
-        noiseTexture.SampleLevel(noiseSampler, pn + 27.1, 0).r - 0.5,
-        noiseTexture.SampleLevel(noiseSampler, pn + 41.7, 0).r - 0.5
-    );
-    float3 pw = pn + ubo.diskNoiseWarp * warpOffset;
-    float nDetail = noiseTexture.SampleLevel(noiseSampler, pw, 0).r;
-
-
-    float n = lerp(nBase, nDetail, ubo.diskNoiseAmp);
-    n = remap(n, 0.3, 0.8, 0.0, 1.0); // tighten contrast
-    rho = max(0.0, base * n);
-
-    // temperature color  by radius
-    float tRad = 1.0 - saturate((rperp - ubo.diskRin) / max(ubo.diskRout - ubo.diskRin, 1e-3));
-    tRad = saturate(tRad + ubo.temperatureBias * (tRad - 0.5));
-    float3 baseCol = diskColorRamp(tRad);
-
-    // doppler boosting (approximated by camera frame)
-    float3 phiHat = (rperp > 1e-5) ? normalize(float3(-p.z, 0.0, p.x)) : float3(0, 0, 0);
-    float3 v = vK * phiHat; // gas velocity
-    float v2 = dot(v, v);
-    float gamma = rsqrt(max(1.0 - v2, 1e-4));
-    float cosTheta = dot(v, -rayDirLocal); // emission travels toward camera
-    float D = 1.0 / (gamma * max(1.0 - cosTheta, 1e-4));
-
-    // gravitational factor via lapse at this point (cheap)
-    float r = length(p);
-    float2 sph = cartesianToSpherical(p);
-    KerrMetricComponents metric = computeKerrMetric(r, sph.x, a, M);
-    float grav = 1.0 / max(metric.alpha, 1e-3);
-
-    // emissive color (base -> doppler boost -> gravitational)
-    emissive = baseCol * ubo.emissionScale;
-    emissive *= pow(D, ubo.dopplerPower);
-    emissive *= grav;
-}
-
-void sampleDiskImproved(
+void sampleDisk(
     float3 p,
     float3 rayDir,
     float M,
@@ -420,8 +289,8 @@ void sampleDiskImproved(
     float theta = atan2(xz.y, xz.x);
 
     // ----- density calc -----
-    float innerRadius = ubo.diskRin;
-    float outerRadius = ubo.diskRout;
+    float innerRadius = ubo.diskRin * M;
+    float outerRadius = ubo.diskRout * M;
     float innerFade = smoothstep(innerRadius, innerRadius + M, r);
     float outerFade = 1.0 - smoothstep(outerRadius - ubo.diskEdgeK, outerRadius, r);
     float radialMask = innerFade * outerFade;
@@ -437,6 +306,8 @@ void sampleDiskImproved(
     float windingNumber = 2.0;
 
     float spiralAngle = theta - rotationRate * time * 10.0;
+    // float spiralAngle = theta - rotationRate * time * ubo.blackHoleSpin;
+
     spiralAngle += windingNumber * log(r / innerRadius);
 
     float3 spiralCoords;
@@ -451,22 +322,11 @@ void sampleDiskImproved(
     float spiralPattern = sin(spiralAngle * windingNumber) * 0.5 + 0.5;
     spiralPattern = pow(spiralPattern, 2.0);
 
-    // float angleOffset = theta + rotationSpeed * time;
 
-    // float3 noisePos = float3(
-    //     cos(angleOffset) * r / outerRadius,
-    //     h / diskHeight,
-    //     sin(angleOffset) * r / outerRadius
-    // );
-    // float noise1 = noiseTexture.SampleLevel(noiseSampler, noisePos * 2.0, 0).r;
-    // float noise2 = noiseTexture.SampleLevel(noiseSampler, noisePos * 5.0, 0).r;
-    // float noise3 = noiseTexture.SampleLevel(noiseSampler, noisePos * 10.0, 0).r;
 
     float turbulence = noise1 + 0.3 * noise2 + 0.1 * noise3;
     turbulence = turbulence / 1.4;
 
-    // float turbulenceStrength = 0.3 + 0.7 * (r - innerRadius) / (outerRadius - innerRadius);
-    // density = radialMask * verticalProfile * (0.7 + turbulenceStrength * turbulence);
     
     float structure = lerp(turbulence, spiralPattern * turbulence, 0.5);
     
@@ -476,7 +336,7 @@ void sampleDiskImproved(
     
     float clumpiness = noiseTexture.SampleLevel(noiseSampler, spiralCoords * 0.5 + time * 0.1, 0).r;
     if (clumpiness > 0.7) {
-        density *= 1.0 + (clumpiness - 0.7) * 3.0; // Boost density in clumps
+        density *= 1.0 + (clumpiness - 0.7) * 3.0;
     }
 
     // ----- color/emission calculation -----
@@ -484,10 +344,11 @@ void sampleDiskImproved(
     float temperatureParam = 1.0 - saturate((r - innerRadius) / (outerRadius - innerRadius));
     temperatureParam = pow(temperatureParam, 2.0);
 
-    float3 coolColor = float3(0.8, 0.3, 0.1);     // Red-orange
-    float3 warmColor = float3(1.0, 0.7, 0.3);     // Orange-yellow
-    float3 hotColor = float3(1.0, 0.95, 0.8);     // Yellow-white
-    float3 veryHotColor = float3(0.8, 0.85, 1.0); // Blue-white
+    // ring color todo: make a UI param
+    float3 coolColor = float3(0.1, 0.3, 0.9); 
+    float3 warmColor = float3(0.1, 0.3, 0.9);
+    float3 hotColor = float3(0.4, 0.6, 1.0);
+    float3 veryHotColor = float3(0.7, 0.8, 1.0); 
 
     float3 diskColor;
     if (temperatureParam < 0.25) {
@@ -509,15 +370,15 @@ void sampleDiskImproved(
 
     float cosAngle = dot(normalize(velocity), -rayDir);
     float dopplerFactor = gamma * (1.0 - beta * cosAngle);
-
-    float dopplerBoost = pow(1.0 / max(dopplerFactor, 0.1), ubo.dopplerPower);  // Relativistic beaming
+    // relativistic beaming
+    float dopplerBoost = pow(1.0 / max(dopplerFactor, 0.1), ubo.dopplerPower);  
 
     if (cosAngle > 0) {
-        // Moving toward observer - blueshift
+        // moving toward observer - blueshift
         diskColor = lerp(diskColor, diskColor * float3(0.7, 0.85, 1.2), cosAngle * 0.3);
         emissive = diskColor * (1.0 + cosAngle * 0.5); // Brighter
     } else {
-        // Moving away - redshift
+        // moving away - redshift
         diskColor = lerp(diskColor, diskColor * float3(1.2, 0.85, 0.7), -cosAngle * 0.3);
         emissive = diskColor * (1.0 + cosAngle * 0.3); // Dimmer
     }
@@ -527,7 +388,6 @@ void sampleDiskImproved(
     float gravitationalRedshift = sqrt(1.0 - 2.0 * M / max(r, 2.0 * M));
     float compressionBoost = 1.0 + 1.0 * exp(-r / (5.0 * M));
     
-    // Final emission with all effects
     emissive *= ubo.emissionScale * density * dopplerBoost * compressionBoost * gravitationalRedshift;
     
     // Hot spots and flares
@@ -537,39 +397,39 @@ void sampleDiskImproved(
     }
 }
 
-float computeTransmittanceImproved(
-    float3 position,
-    float3 lightDir,
-    float stepSize,
-    int steps,
-    float M,
-    float a,
-    float time,
-    Texture3D<float4> noiseTexture,
-    SamplerState noiseSampler
-)
-{
-    float tau = 0.0;
+// float computeTransmittance(
+//     float3 position,
+//     float3 lightDir,
+//     float stepSize,
+//     int steps,
+//     float M,
+//     float a,
+//     float time,
+//     Texture3D<float4> noiseTexture,
+//     SamplerState noiseSampler
+// )
+// {
+//     float tau = 0.0;
     
-    for (int i = 0; i < steps; i++) {
-        float3 samplePos = position + lightDir * (float(i) * stepSize);
+//     for (int i = 0; i < steps; i++) {
+//         float3 samplePos = position + lightDir * (float(i) * stepSize);
         
-        float density;
-        float3 emissive;  // Not used here
-        sampleDiskImproved(samplePos, -lightDir, M, a, time, noiseTexture, noiseSampler, density, emissive);
+//         float density;
+//         float3 emissive;  // Not used here
+//         sampleDisk(samplePos, -lightDir, M, a, time, noiseTexture, noiseSampler, density, emissive);
         
-        tau += density * stepSize;
-    }
+//         tau += density * stepSize;
+//     }
     
-    return exp(-tau);
-}
+//     return exp(-tau);
+// }
 
 [shader("compute")]
 [numthreads(16, 16, 1)]
 void computeMain(uint3 dispatchThreadID: SV_DispatchThreadID)
 {
     uint width, height;
-    storageImage.GetDimensions(width, height);
+    hdrColorBuffer.GetDimensions(width, height);
     int2 pixelCoords = int2(dispatchThreadID.xy);
 
     if (pixelCoords.x >= width || pixelCoords.y >= height) return;
@@ -604,7 +464,7 @@ void computeMain(uint3 dispatchThreadID: SV_DispatchThreadID)
     float3 L = float3(0, 0, 0); // emitted radiance along the path
     float T = 1.0; // transmittance
 
-    float2 noiseCoord = float2(pixelCoords) / 64.0; //  64x64 blue noise texture
+    float2 noiseCoord = float2(pixelCoords) / 64.0;
     float blueNoise = frac(sin(dot(noiseCoord, float2(12.9898, 78.233))) * 43758.5453);
     float jitter = (blueNoise - 0.5) * STEP_SIZE * 0.5;
 
@@ -669,7 +529,7 @@ void computeMain(uint3 dispatchThreadID: SV_DispatchThreadID)
                     {
                         float density;
                         float3 emissive;
-                        sampleDiskImproved(
+                        sampleDisk(
                             pMid,
                             segDir,
                             M,
@@ -695,7 +555,6 @@ void computeMain(uint3 dispatchThreadID: SV_DispatchThreadID)
                             }
                             else
                             {
-                                // Linear approximation for small extinction
                                 L += T * src * ubo.sigmaT * ds;
                             }
 
@@ -728,25 +587,25 @@ void computeMain(uint3 dispatchThreadID: SV_DispatchThreadID)
             //     float glowStrength = 1.0 - saturate((lastDist - horizonRadius) / (horizonRadius * 0.5));
             //     rimGlow = float3(0.5, 0.3, 0.8) * glowStrength * 0.2; // Purple-ish glow
             // }
-            finalColor = L.bgr;
+            finalColor = L;
         }
     }
     else
     {
         float3 bg = sampleBackground(rayState.direction);
-        if (ubo.backgroundType == 1)
-        {
-            float exposure = ubo.exposure; // default 1.0
-            float gamma = ubo.gamma; // default 2.2
+        // if (ubo.backgroundType == 1)
+        // {
+        //     float exposure = ubo.exposure; // default 1.0
+        //     float gamma = ubo.gamma; // default 2.2
             
-            // bg = reinhardToneMapping(bg, exposure);
-            // bg = exposureToneMapping(bg, exposure);
-            bg = ACESFilm(bg * exposure);
-            bg = pow(bg, float3(1.0 / gamma));
-        }
+        //     // bg = reinhardToneMapping(bg, exposure);
+        //     // bg = exposureToneMapping(bg, exposure);
+        //     bg = ACESFilm(bg * exposure);
+        //     bg = pow(bg, float3(1.0 / gamma));
+        // }
         
-        finalColor = L.bgr + T * bg;
+        finalColor = L + T * bg;
     }
 
-    storageImage[pixelCoords] = float4(finalColor, 1.0);
+    hdrColorBuffer[pixelCoords] = float4(finalColor, 1.0);
 }

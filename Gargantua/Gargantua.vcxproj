@@ -178,6 +178,11 @@
     <ClInclude Include="Window.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="..\README.md" />
+    <None Include="shaders\bloom_extract.slang" />
+    <None Include="shaders\gaussian_blur.slang" />
+    <None Include="shaders\noise3d.slang" />
+    <None Include="shaders\post_composite.slang" />
     <None Include="shaders\raymarcher.slang" />
     <None Include="shaders\shader.slang" />
   </ItemGroup>
